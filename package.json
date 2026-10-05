@@ -1,0 +1,23 @@
+{
+  "name": "updown",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.9.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm -F @updown/contracts build && concurrently -k -n db,contracts,api,web -c gray,magenta,cyan,green \"pnpm db:start\" \"pnpm -F @updown/contracts dev\" \"pnpm -F @updown/api dev\" \"pnpm -F @updown/web dev\"",
+    "db:start": "node scripts/dev-db.mjs",
+    "db:docker": "docker compose -f infra/docker-compose.yml up -d postgres",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5",
+    "embedded-postgres": "18.4.0-beta.17",
+    "typescript": "~6.0.3"
+  }
+}

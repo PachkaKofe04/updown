@@ -1,0 +1,33 @@
+# Локальная инфраструктура через Docker (альтернатива scripts/dev-db.mjs).
+# Порт и учётные данные совпадают с embedded-вариантом, DATABASE_URL не меняется.
+name: updown
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: updown
+      POSTGRES_PASSWORD: updown
+      POSTGRES_DB: updown
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C --locale-provider=builtin --builtin-locale=C.UTF-8
+    ports:
+      - '54329:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U updown -d updown']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Пока не используется приложением: понадобится для нескольких инстансов API,
+  # общего rate limit и кэша рейтингов. Только временное состояние.
+  redis:
+    image: redis:8-alpine
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    ports:
+      - '56379:6379'
+    profiles: ['redis']
+
+volumes:
+  pgdata:

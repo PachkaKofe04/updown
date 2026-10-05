@@ -1,0 +1,123 @@
+@import 'tailwindcss';
+
+/*
+  Дизайн-токены UpDown (Dark Luxe). Только тёмная тема.
+  Пара UP/DOWN проверена на различимость при дальтонизме (deutan dE 8.9, tritan 11.1),
+  но цвет никогда не единственный канал: всегда стрелка + подпись + положение.
+  Контраст текста на surface-1: text-1 16:1, text-2 6.3:1, text-3 5.1:1.
+*/
+@theme {
+  --color-bg: #07090d;
+  --color-surface-1: #0d1117;
+  --color-surface-2: #121823;
+  --color-surface-3: #18202d;
+  --color-hairline: rgb(160 180 220 / 0.08);
+  --color-hairline-strong: rgb(160 180 220 / 0.14);
+
+  --color-text-1: #e8ecf3;
+  --color-text-2: #8c96a8;
+  --color-text-3: #7a8599;
+
+  --color-up: #24c9a6;
+  --color-up-ink: #04130f;
+  --color-up-soft: rgb(36 201 166 / 0.12);
+  --color-down: #f45b69;
+  --color-down-ink: #1a0609;
+  --color-down-soft: rgb(244 91 105 / 0.12);
+  --color-accent: #6e8bff;
+  --color-accent-text: #8ea4ff;
+  --color-accent-ink: #060a1a;
+  --color-accent-soft: rgb(110 139 255 / 0.14);
+  --color-warning: #e8b04b;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* Типографическая шкала: подпись, метка, текст, акцент, заголовок, цена, крупное число */
+  --text-caption: 11px;
+  --text-caption--line-height: 14px;
+  --text-label: 13px;
+  --text-label--line-height: 16px;
+  --text-body: 15px;
+  --text-body--line-height: 20px;
+  --text-emph: 17px;
+  --text-emph--line-height: 22px;
+  --text-title: 20px;
+  --text-title--line-height: 24px;
+  --text-price: 30px;
+  --text-price--line-height: 34px;
+  --text-hero: 40px;
+  --text-hero--line-height: 44px;
+
+  /* Радиусы: один радиус на тип компонента */
+  --radius-chip: 10px;
+  --radius-control: 14px;
+  --radius-card: 18px;
+  --radius-sheet: 24px;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --shadow-raise: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 8px 24px rgb(0 0 0 / 0.35);
+  --shadow-float: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 16px 48px rgb(0 0 0 / 0.5);
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Высоты контролов */
+  --h-chip: 36px;
+  --h-control: 44px;
+  --h-amount: 52px;
+  --h-action: 64px;
+  --h-nav: 56px;
+
+  /* Длительности анимаций: нажатие, переход, панель, событие результата */
+  --t-fast: 120ms;
+  --t-std: 220ms;
+  --t-panel: 280ms;
+  --t-result: 560ms;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 0ms;
+    --t-std: 0ms;
+    --t-panel: 0ms;
+    --t-result: 0ms;
+  }
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-text-1);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+button,
+[role='button'] {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Меняющиеся числа (цена, таймер, баланс): одинаковая ширина цифр, без дрожания строки */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
