@@ -4,6 +4,7 @@ import type { AssetDto, Direction } from '@updown/contracts';
 import { useCallback } from 'react';
 import { api, ApiRequestError } from '@/shared/lib/api';
 import { serverNow } from '@/shared/lib/server-clock';
+import { uuid } from '@/shared/lib/uuid';
 import { ticksOf } from '@/shared/state/market';
 import { useSession } from '@/shared/state/session';
 import { useTrade } from '@/shared/state/trade';
@@ -27,7 +28,7 @@ export function usePlacePrediction(asset: AssetDto | undefined) {
       const buf = ticksOf(asset.id);
       const price = buf.p[buf.p.length - 1];
       if (price === undefined) return;
-      const tempId = crypto.randomUUID();
+      const tempId = uuid();
       addPending({ tempId, assetId: asset.id, direction, durationSec: duration, stake, at: serverNow(), price });
       navigator.vibrate?.(8);
       try {

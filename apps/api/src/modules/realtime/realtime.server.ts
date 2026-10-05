@@ -5,6 +5,7 @@ import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
 import { Clock } from '../../common/clock.js';
+import { lanAddresses } from '../../common/lan.js';
 import { UserEvents } from '../../common/user-events.js';
 import { rawDataToString } from '../../common/ws-data.js';
 import { ENV, type Env } from '../../config/env.js';
@@ -92,7 +93,13 @@ export class RealtimeServer implements OnApplicationBootstrap, OnApplicationShut
     if (!origin) return true;
     if (origin === this.env.WEB_ORIGIN) return true;
     if (this.env.isProduction) return false;
-    return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    // dev: страница открыта на этом же компьютере или с телефона по его адресу в локальной сети
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
+    try {
+      return lanAddresses().has(new URL(origin).hostname);
+    } catch {
+      return false;
+    }
   }
 
   private async onConnection(ws: WebSocket, req: IncomingMessage): Promise<void> {
