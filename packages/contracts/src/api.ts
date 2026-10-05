@@ -30,6 +30,8 @@ export const AssetDtoSchema = z.object({
   payoutBps: z.number().int(),
   minStake: Coins,
   durations: z.array(DurationSchema),
+  /** Последняя цена (mid) на момент запроса; живой поток идёт по WebSocket. */
+  price: DecimalString.nullable(),
   feed: FeedStateSchema,
   marketOpen: z.boolean(),
   nextMarketChangeAt: Ms.nullable(),

@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Next.js не должен дописывать служебные файлы в репозиторий при `next dev`.
   agentRules: false,
+  devIndicators: false,
   // Один origin для браузера: cookie сессии остаются first-party. В production это делает reverse proxy.
   async rewrites() {
     return [{ source: '/api/:path*', destination: `${apiOrigin}/:path*` }];

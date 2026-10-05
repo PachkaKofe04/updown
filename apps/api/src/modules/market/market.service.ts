@@ -181,6 +181,7 @@ export class MarketService implements OnModuleInit, OnApplicationShutdown, Provi
       payoutBps: asset.payoutBps,
       minStake: asset.minStake,
       durations: asset.durations,
+      price: this.store.latest(asset.id)?.mid ?? null,
       feed: this.feedState(asset.id),
       marketOpen: isMarketOpen(asset.schedule, now),
       nextMarketChangeAt: nextMarketChange(asset.schedule, now),

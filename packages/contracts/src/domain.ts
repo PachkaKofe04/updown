@@ -42,6 +42,8 @@ export const ERROR_CODES = [
   'duration_not_allowed',
   'asset_unavailable',
   'idempotency_conflict',
+  'nickname_invalid',
+  'nickname_taken',
   'maintenance',
   'internal',
 ] as const;

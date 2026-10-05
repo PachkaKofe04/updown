@@ -9,11 +9,6 @@ export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-/** Ник гостя вида Trader4821. Уникальность обеспечивает индекс, при конфликте генерируется новый. */
-export function guestNickname(): string {
-  return `Trader${randomInt(1000, 1_000_000)}`;
-}
-
 const REF_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 /** Реферальный код из 8 символов без похожих букв и цифр. */

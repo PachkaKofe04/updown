@@ -45,7 +45,12 @@ export const users = pgTable(
     uniqueIndex('users_referral_code_uq').on(t.referralCode),
     check('users_kind_check', sql`${t.kind} in ('guest', 'registered')`),
     check('users_status_check', sql`${t.status} in ('active', 'banned', 'deleted')`),
-    check('users_nickname_check', sql`char_length(${t.nickname}) between 3 and 20`),
+    // Те же правила, что в приложении: 3-16 символов, буква в начале, один алфавит.
+    check(
+      'users_nickname_check',
+      sql`char_length(${t.nickname}) between 3 and 16
+        and (${t.nickname} ~ '^[A-Za-z][A-Za-z0-9_]*$' or ${t.nickname} ~ '^[А-Яа-яЁё][А-Яа-яЁё0-9_]*$')`,
+    ),
   ],
 );
 

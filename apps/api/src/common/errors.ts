@@ -23,6 +23,8 @@ const MESSAGES: Record<ErrorCode, string> = {
   duration_not_allowed: 'Этот интервал недоступен для выбранного актива.',
   asset_unavailable: 'Актив сейчас недоступен.',
   idempotency_conflict: 'Этот запрос уже был отправлен с другими параметрами.',
+  nickname_invalid: 'Выберите другой ник.',
+  nickname_taken: 'Этот ник уже занят.',
   maintenance: 'Короткое обслуживание. Новые прогнозы откроются через минуту.',
   internal: 'Что-то пошло не так. Попробуйте ещё раз.',
 };
@@ -40,6 +42,8 @@ const STATUS: Record<ErrorCode, number> = {
   duration_not_allowed: HttpStatus.UNPROCESSABLE_ENTITY,
   asset_unavailable: HttpStatus.CONFLICT,
   idempotency_conflict: HttpStatus.CONFLICT,
+  nickname_invalid: HttpStatus.UNPROCESSABLE_ENTITY,
+  nickname_taken: HttpStatus.CONFLICT,
   maintenance: HttpStatus.SERVICE_UNAVAILABLE,
   internal: HttpStatus.INTERNAL_SERVER_ERROR,
 };

@@ -29,6 +29,13 @@
       "when": 1791184982482,
       "tag": "0003_ledger_wallet_seq",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791186665787,
+      "tag": "0004_nickname_rules",
+      "breakpoints": true
     }
   ]
 }

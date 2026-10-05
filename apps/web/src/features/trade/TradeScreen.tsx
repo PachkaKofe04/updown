@@ -1,0 +1,66 @@
+'use client';
+
+import { useRef, useState } from 'react';
+import { Onboarding } from '@/features/onboarding/Onboarding';
+import { useMarket } from '@/shared/state/market';
+import { useSession } from '@/shared/state/session';
+import { useTrade } from '@/shared/state/trade';
+import { BottomNav } from '@/shared/ui/BottomNav';
+import { ActionButtons } from './ActionButtons';
+import { AssetSheet } from './AssetSheet';
+import { ChartDock } from './ChartDock';
+import { PriceChart } from './chart/PriceChart';
+import { PriceHeader } from './PriceHeader';
+import { StakeControl } from './StakeControl';
+import { TimeframeSelector } from './TimeframeSelector';
+import { TopBar } from './TopBar';
+
+/** Главный экран: понятен за 3-5 секунд, всё помещается на 390 px без прокрутки. */
+export function TradeScreen() {
+  const status = useSession((s) => s.status);
+  const assetId = useTrade((s) => s.assetId);
+  const asset = useMarket((s) => s.assets.find((a) => a.id === assetId));
+  const [picker, setPicker] = useState(false);
+  const dockRef = useRef<HTMLDivElement>(null);
+
+  return (
+    <div className="mx-auto flex h-dvh max-w-[480px] flex-col overflow-hidden">
+      <main className="flex min-h-0 flex-1 flex-col px-4 pt-[calc(var(--safe-top)+6px)]">
+        <TopBar asset={asset} onPickAsset={() => setPicker(true)} />
+        {asset ? (
+          <>
+            <PriceHeader asset={asset} />
+            <div className="relative -mx-4 min-h-[180px] flex-1">
+              <PriceChart key={asset.id} assetId={asset.id} priceScale={asset.priceScale} overlayRef={dockRef} />
+              <ChartDock ref={dockRef} />
+            </div>
+            <div className="space-y-2.5 pt-2">
+              <TimeframeSelector asset={asset} />
+              <StakeControl asset={asset} />
+              <ActionButtons asset={asset} />
+            </div>
+          </>
+        ) : (
+          <SkeletonTrade />
+        )}
+      </main>
+      <BottomNav />
+      {status === 'anonymous' && <Onboarding />}
+      <AssetSheet open={picker} onClose={() => setPicker(false)} />
+    </div>
+  );
+}
+
+/** Каркас вместо пустого экрана, пока грузится список активов. */
+function SkeletonTrade() {
+  return (
+    <div className="flex flex-1 flex-col gap-3 pt-3" aria-busy="true">
+      <div className="h-8 w-44 animate-pulse rounded-chip bg-surface-2" />
+      <div className="h-3 w-56 animate-pulse rounded-chip bg-surface-2" />
+      <div className="mt-2 flex-1 animate-pulse rounded-card bg-surface-1" />
+      <div className="h-11 animate-pulse rounded-control bg-surface-2" />
+      <div className="h-[52px] animate-pulse rounded-control bg-surface-2" />
+      <div className="h-16 animate-pulse rounded-card bg-surface-2" />
+    </div>
+  );
+}
