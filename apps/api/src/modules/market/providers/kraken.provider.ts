@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import WebSocket from 'ws';
+import { rawDataToString } from '../../../common/ws-data.js';
 import type { MarketDataProvider, ProviderSink } from '../market.types.js';
 import { KrakenBook } from './kraken-book.js';
 import { type KrakenBookData, parseKrakenMessage } from './kraken-json.js';
@@ -76,7 +77,7 @@ export class KrakenProvider implements MarketDataProvider {
       this.send({ method: 'subscribe', params: { channel: 'book', symbol: this.symbols, depth: DEPTH }, req_id: 1 });
       this.log.log(`connected, subscribing ${this.symbols.join(', ')}`);
     });
-    ws.on('message', (data: WebSocket.RawData) => this.onMessage(data.toString()));
+    ws.on('message', (data: WebSocket.RawData) => this.onMessage(rawDataToString(data)));
     ws.on('close', (code) => this.onDisconnect(`closed (${code})`));
     ws.on('error', (error) => this.log.warn(`socket error: ${error.message}`));
   }

@@ -100,6 +100,8 @@ export const wallets = pgTable(
     contextId: uuid('context_id'),
     balance: coins('balance').notNull().default(0),
     peakBalance: coins('peak_balance').notNull().default(0),
+    // Счётчик проводок кошелька: увеличивает только триггер журнала (под блокировкой кошелька).
+    ledgerSeq: bigint('ledger_seq', { mode: 'number' }).notNull().default(0),
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
@@ -132,8 +134,12 @@ export const ledgerEntries = pgTable(
       .notNull()
       .references(() => wallets.id),
     amount: coins('amount').notNull(),
-    // Проставляет триггер ledger_entries_apply; 0 из приложения всегда перезаписывается.
+    // balance_after и wallet_seq проставляет триггер ledger_entries_apply; 0 из приложения перезаписывается.
     balanceAfter: coins('balance_after')
+      .notNull()
+      .$defaultFn(() => 0),
+    // Порядок применения проводок внутри кошелька (id выдаётся до блокировки и порядок не отражает).
+    walletSeq: bigint('wallet_seq', { mode: 'number' })
       .notNull()
       .$defaultFn(() => 0),
     type: text('type', { enum: LEDGER_TYPES }).notNull(),
@@ -146,7 +152,7 @@ export const ledgerEntries = pgTable(
   },
   (t) => [
     uniqueIndex('ledger_entries_idempotency_uq').on(t.idempotencyKey),
-    index('ledger_entries_wallet_idx').on(t.walletId, t.id),
+    uniqueIndex('ledger_entries_wallet_seq_uq').on(t.walletId, t.walletSeq),
     check('ledger_entries_amount_nonzero', sql`${t.amount} <> 0`),
     check(
       'ledger_entries_type_check',

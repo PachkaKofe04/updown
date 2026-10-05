@@ -31,8 +31,7 @@ export interface AuthContext {
 
 @Injectable()
 export class IdentityService {
-  // Не правило "1 IP = 1 аккаунт", а ограничение частоты: 5 гостей за 10 минут с одного IP.
-  private readonly guestLimiter = new RateLimiter(5, 10 * 60 * 1000);
+  private readonly guestLimiter: RateLimiter;
 
   constructor(
     @Inject(DB) private readonly db: Db,
@@ -40,7 +39,9 @@ export class IdentityService {
     private readonly clock: Clock,
     private readonly wallets: WalletService,
     private readonly stats: StatsService,
-  ) {}
+  ) {
+    this.guestLimiter = new RateLimiter(env.GUESTS_PER_IP_PER_10_MIN, 10 * 60 * 1000);
+  }
 
   /** Гость: пользователь, кошелёк, статистика, приветственный бонус и сессия - одной транзакцией. */
   async createGuest(meta: RequestMeta): Promise<{ token: string; deviceId: string; userId: string }> {

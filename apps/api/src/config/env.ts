@@ -20,6 +20,10 @@ const EnvSchema = z
     TRUST_PROXY: bool(false),
     DRAIN_ON_SHUTDOWN: z.string().optional(),
     STARTING_BALANCE: z.coerce.number().int().positive().default(10_000),
+    // Не больше N прогнозов в секунду на игрока: защита от скриптов и двойных тапов.
+    PREDICTIONS_PER_SECOND: z.coerce.number().int().min(1).max(1000).default(2),
+    // Не правило "1 IP = 1 аккаунт", а ограничение частоты создания гостей с одного IP за 10 минут.
+    GUESTS_PER_IP_PER_10_MIN: z.coerce.number().int().min(1).max(10_000).default(5),
   })
   .transform((e) => {
     const prod = e.NODE_ENV === 'production';

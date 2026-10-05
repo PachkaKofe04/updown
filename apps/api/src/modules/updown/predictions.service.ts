@@ -10,6 +10,7 @@ import { Clock } from '../../common/clock.js';
 import { DomainError } from '../../common/errors.js';
 import { RateLimiter } from '../../common/rate-limit.js';
 import { UserEvents } from '../../common/user-events.js';
+import { ENV, type Env } from '../../config/env.js';
 import { DB, type Db, type Tx } from '../../db/db.js';
 import { predictions } from '../../db/schema.js';
 import { MarketService } from '../market/market.service.js';
@@ -21,17 +22,19 @@ export const MAX_OPEN_PREDICTIONS = 10;
 
 @Injectable()
 export class PredictionsService {
-  // Не больше 2 прогнозов в секунду на игрока: защита от скриптов и двойных тапов.
-  private readonly limiter = new RateLimiter(2, 1000);
+  private readonly limiter: RateLimiter;
 
   constructor(
     @Inject(DB) private readonly db: Db,
+    @Inject(ENV) env: Env,
     private readonly clock: Clock,
     private readonly market: MarketService,
     private readonly wallets: WalletService,
     private readonly settlement: SettlementService,
     private readonly events: UserEvents,
-  ) {}
+  ) {
+    this.limiter = new RateLimiter(env.PREDICTIONS_PER_SECOND, 1000);
+  }
 
   async create(userId: string, body: CreatePredictionBody, ip: string | null): Promise<CreatePredictionResponse> {
     // Повтор того же запроса (сеть, двойной тап) возвращает уже созданный прогноз.

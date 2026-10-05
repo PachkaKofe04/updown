@@ -12,8 +12,12 @@ interface SimSymbol {
 const DEFAULTS: Record<string, SimSymbol> = {
   'BTC/USD': { start: '85000.0', decimals: 1, maxStep: 40 },
   'ETH/USD': { start: '2700.00', decimals: 2, maxStep: 30 },
+  'SOL/USD': { start: '120.00', decimals: 2, maxStep: 3 },
+  'XRP/USD': { start: '1.50000', decimals: 5, maxStep: 4 },
+  'DOGE/USD': { start: '0.0960000', decimals: 7, maxStep: 20 },
   'EUR/USD': { start: '1.11800', decimals: 5, maxStep: 2 },
-  'GBP/USD': { start: '1.30500', decimals: 5, maxStep: 3 },
+  'GBP/USD': { start: '1.32100', decimals: 5, maxStep: 3 },
+  'USD/CAD': { start: '1.42600', decimals: 5, maxStep: 3 },
 };
 
 /** Детерминированный генератор (mulberry32). */

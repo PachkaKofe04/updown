@@ -6,6 +6,7 @@ import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
 import { Clock } from '../../common/clock.js';
 import { UserEvents } from '../../common/user-events.js';
+import { rawDataToString } from '../../common/ws-data.js';
 import { ENV, type Env } from '../../config/env.js';
 import { IdentityService, SESSION_COOKIE } from '../identity/identity.service.js';
 import type { Tick } from '../market/market.types.js';
@@ -128,7 +129,7 @@ export class RealtimeServer implements OnApplicationBootstrap, OnApplicationShut
   private onMessage(client: Client, data: WebSocket.RawData): void {
     let msg: WsClientMessage;
     try {
-      msg = WsClientMessageSchema.parse(JSON.parse(data.toString()));
+      msg = WsClientMessageSchema.parse(JSON.parse(rawDataToString(data)));
     } catch {
       return;
     }
