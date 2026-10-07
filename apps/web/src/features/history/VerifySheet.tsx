@@ -87,7 +87,7 @@ function Summary({ p, asset }: { p: PredictionDto; asset: AssetDto | undefined }
     p.status === 'won' ? 'Выигрыш' : p.status === 'lost' ? 'Проигрыш' : p.status === 'tie' ? 'Ничья' : p.status === 'void' ? 'Отменён' : 'Идёт';
   const color = p.status === 'won' ? 'text-up' : p.status === 'lost' ? 'text-down' : 'text-text-1';
   return (
-    <div className="flex items-end justify-between rounded-card bg-surface-2 px-4 py-3">
+    <div className="verify-summary flex items-end justify-between gap-3">
       <div>
         <div className="text-label font-semibold">
           {asset?.displayName ?? p.assetId} · <span className={up ? 'text-up' : 'text-down'}>{up ? 'UP' : 'DOWN'}</span> ·{' '}
@@ -107,7 +107,7 @@ function Summary({ p, asset }: { p: PredictionDto; asset: AssetDto | undefined }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section>
+    <section className="verify-section">
       <h3 className="mb-1.5 text-caption font-semibold uppercase tracking-[0.12em] text-text-3">{title}</h3>
       {children}
     </section>
@@ -117,7 +117,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 /** Момент (приём прогноза или экспирация) и котировка, которая на него пришлась. */
 function Quote({ moment: [label, at], q, scale }: { moment: [string, number]; q: PriceRef; scale: number }) {
   return (
-    <dl className="tnum grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-label">
+    <dl className="verify-quote tnum grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-[11px] leading-4">
       <dt className="text-text-3">{label}</dt>
       <dd className="text-right text-text-2">{formatClockMs(at)}</dd>
       <dt className="text-text-3">Цена (середина)</dt>

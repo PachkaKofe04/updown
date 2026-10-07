@@ -1,6 +1,7 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MotionConfig } from 'motion/react';
 import { type ReactNode, useState } from 'react';
 import { RealtimeBridge } from '@/shared/state/bridge';
 import { Toasts } from '@/shared/ui/Toasts';
@@ -14,9 +15,11 @@ export function Providers({ children }: { children: ReactNode }) {
   );
   return (
     <QueryClientProvider client={client}>
-      <RealtimeBridge />
-      {children}
-      <Toasts />
+      <MotionConfig reducedMotion="user">
+        <RealtimeBridge />
+        {children}
+        <Toasts />
+      </MotionConfig>
     </QueryClientProvider>
   );
 }

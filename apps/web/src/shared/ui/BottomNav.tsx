@@ -15,9 +15,9 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Разделы"
-      className="shrink-0 border-t border-hairline bg-bg/90 pb-[var(--safe-bottom)] backdrop-blur-md"
+      className="bottom-nav"
     >
-      <ul className="mx-auto flex h-[var(--h-nav)] max-w-[480px]">
+      <ul>
         {ITEMS.map((item) => {
           const active = item.href === '/' ? path === '/' : path.startsWith(item.href);
           return (
@@ -25,9 +25,7 @@ export function BottomNav() {
               <Link
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
-                className={`flex h-full flex-col items-center justify-center gap-0.5 text-caption font-medium transition-colors duration-[var(--t-fast)] ${
-                  active ? 'text-text-1' : 'text-text-3'
-                }`}
+                className="nav-link"
               >
                 <Icon name={item.icon} size={22} />
                 {item.label}

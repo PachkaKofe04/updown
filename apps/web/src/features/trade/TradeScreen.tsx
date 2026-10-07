@@ -24,22 +24,33 @@ export function TradeScreen() {
   const dockRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="mx-auto flex h-dvh max-w-[480px] flex-col overflow-hidden">
-      <main className="flex min-h-0 flex-1 flex-col px-4 pt-[calc(var(--safe-top)+6px)]">
+    <div className="trade-shell">
+      <main className="trade-main">
         <TopBar asset={asset} onPickAsset={() => setPicker(true)} />
         {asset ? (
-          <>
-            <PriceHeader asset={asset} />
-            <div className="relative -mx-4 min-h-[180px] flex-1">
-              <PriceChart key={asset.id} assetId={asset.id} priceScale={asset.priceScale} overlayRef={dockRef} />
-              <ChartDock ref={dockRef} />
-            </div>
-            <div className="space-y-2.5 pt-2">
+          <div className="trade-workspace">
+            <section className="market-panel" aria-label="Рынок">
+              <PriceHeader asset={asset} />
+              <div className="chart-stage">
+                <PriceChart key={asset.id} assetId={asset.id} priceScale={asset.priceScale} overlayRef={dockRef} />
+                <ChartDock ref={dockRef} />
+              </div>
+              <div className="chart-note">
+                <span>Линия сглажена между котировками.</span>
+                <span>{asset.displayName}</span>
+              </div>
+            </section>
+            <section className="trade-controls" aria-label="Параметры прогноза">
+              <div className="controls-heading">
+                <span className="eyebrow">Следующее движение</span>
+                <h2>Ваш прогноз</h2>
+                <p>Выберите направление цены к концу интервала.</p>
+              </div>
               <TimeframeSelector asset={asset} />
               <StakeControl asset={asset} />
               <ActionButtons asset={asset} />
-            </div>
-          </>
+            </section>
+          </div>
         ) : (
           <SkeletonTrade />
         )}

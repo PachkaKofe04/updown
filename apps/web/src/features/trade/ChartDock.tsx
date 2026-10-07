@@ -32,9 +32,10 @@ export function ChartDock({ ref }: { ref: Ref<HTMLDivElement> }) {
   }, [banner, dismiss]);
 
   return (
-    // popLayout: уходящая карточка не занимает место, новая встаёт сразу на её позицию
-    <div ref={ref} className="absolute inset-x-4 bottom-8">
-      <AnimatePresence mode="popLayout" initial={false}>
+    // Карточки лежат в одной ячейке сетки: смена "активный -> итог" идёт на месте, а слот
+    // (и место под ним на графике) освобождается только после того, как карточка растворилась.
+    <div ref={ref} className="chart-dock">
+      <AnimatePresence initial={false}>
         {banner ? (
           <motion.button
             key={`result-${banner.prediction.id}`}

@@ -53,6 +53,7 @@ export function PriceChart({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hasTicks = useMarket((s) => Boolean(s.prices[assetId]));
   const feed = useMarket((s) => s.feeds[assetId]);
+  const connection = useMarket((s) => s.connection);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -94,7 +95,7 @@ export function PriceChart({
           priceScale,
           durationSec: trade.duration,
           markers,
-          live: useMarket.getState().feeds[assetId] === 'live',
+          live: useMarket.getState().feeds[assetId] === 'live' && useMarket.getState().connection === 'open',
           insetBottom,
         },
         dt,
@@ -110,7 +111,7 @@ export function PriceChart({
 
   return (
     <div ref={wrapRef} className="relative h-full w-full">
-      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-label="График цены" role="img" />
+      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-label="График цены: сглаженная линия между котировками, выборка 500 миллисекунд. Маркеры показывают точные цены прогноза." role="img" />
       {!hasTicks && (
         <div className="absolute inset-0 grid place-items-center">
           <div className="flex items-center gap-2 rounded-full bg-surface-2/80 px-3 py-1.5 text-caption text-text-2">
@@ -119,9 +120,9 @@ export function PriceChart({
           </div>
         </div>
       )}
-      {hasTicks && feed && feed !== 'live' && (
+      {hasTicks && ((feed && feed !== 'live') || connection === 'reconnecting') && (
         <div className="absolute left-3 top-2 rounded-full border border-warning/30 bg-surface-1/90 px-2.5 py-1 text-caption text-warning">
-          {feed === 'closed' ? 'Рынок закрыт' : 'Котировка устарела'}
+          {connection === 'reconnecting' ? 'Переподключение' : feed === 'closed' ? 'Рынок закрыт' : 'Котировка устарела'}
         </div>
       )}
     </div>

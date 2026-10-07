@@ -30,7 +30,7 @@ export function Sheet({
           <motion.button
             type="button"
             aria-label="Закрыть"
-            className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-black/65 backdrop-blur-[4px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -38,19 +38,19 @@ export function Sheet({
             onClick={onClose}
           />
           <motion.div
-            className="relative w-full max-w-[480px] rounded-t-sheet border border-b-0 border-hairline-strong bg-surface-1 pb-[calc(var(--safe-bottom)+12px)] shadow-float"
+            className="sheet-panel"
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', stiffness: 420, damping: 42 }}
           >
-            <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-hairline-strong" />
-            <div className="flex items-center justify-between px-5 pb-2 pt-3">
+            <div className="sheet-grip" />
+            <div className="sheet-heading">
               <h2 className="text-emph font-semibold">{title}</h2>
               <button
                 type="button"
                 onClick={onClose}
-                className="-mr-2 grid size-11 place-items-center rounded-full text-text-2 active:bg-surface-2"
+                className="icon-control -mr-2"
                 aria-label="Закрыть"
               >
                 <Icon name="close" />

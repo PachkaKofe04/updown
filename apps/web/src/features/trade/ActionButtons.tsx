@@ -1,7 +1,6 @@
 'use client';
 
 import type { AssetDto, Direction } from '@updown/contracts';
-import { motion } from 'motion/react';
 import { formatCoins, profitFor } from '@/shared/lib/format';
 import { useMarket } from '@/shared/state/market';
 import { useSession } from '@/shared/state/session';
@@ -30,11 +29,15 @@ export function ActionButtons({ asset }: { asset: AssetDto }) {
 
   return (
     <div>
-      <div className="grid h-[var(--h-action)] grid-cols-2 gap-2.5">
+      <div className="payout-row">
+        <span>Прибыль при успехе <strong className="tnum">+{formatCoins(profit)}</strong></span>
+        <span className="payout-return">Возврат <b className="tnum">{formatCoins(stake + profit)}</b></span>
+      </div>
+      <div className="action-grid">
         <TradeButton direction="UP" profit={profit} disabled={reason !== null} onPress={place} />
         <TradeButton direction="DOWN" profit={profit} disabled={reason !== null} onPress={place} />
       </div>
-      <p className="mt-2 min-h-4 text-center text-caption text-text-3" aria-live="polite">
+      <p className="action-reason" aria-live="polite">
         {reason}
       </p>
     </div>
@@ -54,23 +57,20 @@ function TradeButton({
 }) {
   const up = direction === 'UP';
   return (
-    <motion.button
+    <button
       type="button"
       disabled={disabled}
       onClick={() => onPress(direction)}
-      whileTap={disabled ? undefined : { scale: 0.965 }}
-      transition={{ type: 'spring', stiffness: 700, damping: 30 }}
-      className={`group relative flex items-center justify-between overflow-hidden rounded-card px-4 text-left shadow-raise transition-[filter,opacity] duration-[var(--t-fast)] active:brightness-110 disabled:opacity-40 ${
-        up ? 'bg-up text-up-ink' : 'bg-down text-down-ink'
-      }`}
+      className={`trade-button ${up ? '' : 'trade-button-down'}`}
       aria-label={`${up ? 'Выше' : 'Ниже'}: прибыль ${formatCoins(profit)} Coins`}
     >
-      <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-linear-to-b from-white/18 to-transparent" />
-      <span className="relative flex items-center gap-1.5 text-emph font-bold tracking-wide">
-        <Icon name={up ? 'arrowUp' : 'arrowDown'} size={20} strokeWidth={2.4} />
-        {direction}
+      <span className="trade-button-icon">
+        <Icon name={up ? 'arrowUp' : 'arrowDown'} size={23} strokeWidth={1.8} />
       </span>
-      <span className="tnum relative text-label font-semibold opacity-75">+{formatCoins(profit)}</span>
-    </motion.button>
+      <span className="text-left">
+        <span className="trade-button-title">{direction}</span>
+        <span className="trade-button-caption">{up ? 'Цена выше' : 'Цена ниже'}</span>
+      </span>
+    </button>
   );
 }

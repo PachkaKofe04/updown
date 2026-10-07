@@ -14,7 +14,7 @@ export function AssetGlyph({ assetId, size = 28 }: { assetId: string; size?: num
   return (
     <span
       aria-hidden="true"
-      className="grid shrink-0 place-items-center rounded-full border border-hairline-strong bg-surface-3 font-semibold text-text-1"
+      className="asset-glyph"
       style={{ width: size, height: size, fontSize: size * 0.48 }}
     >
       {GLYPHS[assetId] ?? assetId.slice(0, 1)}

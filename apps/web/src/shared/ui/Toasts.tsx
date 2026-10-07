@@ -41,7 +41,7 @@ export function Toasts() {
             key={t.id}
             type="button"
             onClick={() => remove(t.id)}
-            className="pointer-events-auto flex w-full max-w-[440px] items-start gap-3 rounded-card border border-hairline-strong bg-surface-2/95 px-4 py-3 text-left text-label text-text-1 shadow-float backdrop-blur"
+            className="material pointer-events-auto flex w-full max-w-[440px] items-start gap-3 rounded-card px-4 py-3 text-left text-label text-text-1 shadow-float"
             initial={{ opacity: 0, y: -12, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8 }}

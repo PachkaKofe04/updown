@@ -20,7 +20,7 @@ export function AssetSheet({ open, onClose }: { open: boolean; onClose(): void }
 
   return (
     <Sheet open={open} onClose={onClose} title="Актив">
-      <ul className="max-h-[60dvh] overflow-y-auto px-2 pb-2">
+      <ul className="max-h-[60dvh] space-y-1 overflow-y-auto px-3 pb-3">
         {assets.map((a) => {
           const price = prices[a.id] ?? a.price;
           const feed = feeds[a.id] ?? a.feed;
@@ -33,7 +33,7 @@ export function AssetSheet({ open, onClose }: { open: boolean; onClose(): void }
                   if (!a.durations.includes(duration)) setDuration(a.durations[0] ?? 60);
                   onClose();
                 }}
-                className="flex h-16 w-full items-center gap-3 rounded-card px-3 text-left transition-colors duration-[var(--t-fast)] active:bg-surface-2"
+                className="asset-row"
                 aria-current={a.id === selected}
               >
                 <AssetGlyph assetId={a.id} size={36} />

@@ -30,22 +30,31 @@ export function PriceHeader({ asset }: { asset: AssetDto }) {
           ? { dot: 'bg-text-3', text: 'рынок закрыт' }
           : { dot: 'bg-warning', text: 'нет свежей цены' };
 
+  const formatted = price ? formatPrice(price, asset.priceScale) : null;
+  const [whole, fraction] = formatted?.split(',') ?? [];
+
   return (
-    <div className="pb-1 pt-2">
-      <div className="tnum text-price font-semibold tracking-[-0.02em]" aria-live="off">
-        {price ? formatPrice(price, asset.priceScale) : <span className="text-text-3">-</span>}
-      </div>
-      <div className="mt-1 flex items-center gap-2 text-caption text-text-2">
+    <div className="price-header">
+      <div>
+        <div className="tnum price-number" aria-live="off" aria-label={formatted ? `Цена ${formatted}` : 'Цена загружается'}>
+          {formatted ? <>{whole}{fraction && <span className="price-decimal">,{fraction}</span>}</> : <span className="text-text-3">-</span>}
+        </div>
+        <div className="price-meta">
         {change !== null && minutes !== null && (
           <span className={`tnum font-medium ${change > 0 ? 'text-up' : change < 0 ? 'text-down' : 'text-text-2'}`}>
             {change > 0 ? '+' : change < 0 ? '-' : ''}
             {Math.abs(change).toFixed(2).replace('.', ',')}% за {minutes} мин
           </span>
         )}
-        <span className="flex items-center gap-1.5">
+        <span className="source-status">
           <span className={`size-1.5 rounded-full ${status.dot}`} />
           {SOURCE_NAME[asset.source] ?? asset.source} · {status.text}
         </span>
+        </div>
+      </div>
+      <div className="market-category">
+        <div className="eyebrow">{asset.kind === 'crypto' ? 'Криптовалюта' : 'Валютная пара'}</div>
+        <div className="mt-1 text-label text-text-2">{asset.displayName}</div>
       </div>
     </div>
   );

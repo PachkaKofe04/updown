@@ -13,6 +13,7 @@ import { api, ApiRequestError } from '@/shared/lib/api';
 import { realtime } from '@/shared/lib/realtime';
 import { useSession } from '@/shared/state/session';
 import { CoinMark, Icon } from '@/shared/ui/Icon';
+import { Wordmark } from '@/shared/ui/Wordmark';
 
 type Check = { state: 'idle' | 'checking' | 'ok' } | { state: 'problem'; problem: NicknameProblem; suggestions: string[] };
 
@@ -93,20 +94,21 @@ export function Onboarding() {
   const problem = check.state === 'problem' ? check : null;
 
   return (
-    <div className="fixed inset-0 z-30 flex flex-col justify-end">
-      <div className="absolute inset-0 bg-linear-to-b from-bg/0 via-bg/55 to-bg" />
+    <div className="fixed inset-0 z-30 flex flex-col justify-end lg:justify-center">
+      <div className="absolute inset-0 bg-linear-to-b from-bg/10 via-bg/65 to-bg/95" />
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-        className="relative mx-auto w-full max-w-[480px] px-4 pb-[calc(var(--safe-bottom)+16px)]"
+        className="onboarding-wrap relative"
       >
-        <div className="rounded-sheet border border-hairline-strong bg-surface-1/95 p-5 shadow-float backdrop-blur-md">
-          <h1 className="text-title font-semibold tracking-[-0.01em]">Реальные котировки. Виртуальные деньги.</h1>
-          <p className="mt-2 text-body text-text-2">
-            Угадай, куда пойдёт цена: выше или ниже. Без регистрации и без риска потерять деньги.
+        <div className="material onboarding-card">
+          <div className="onboarding-kicker"><Wordmark /><span className="eyebrow">Начните здесь</span></div>
+          <h1 className="onboarding-title">Реальный рынок.<br /><span>Ваше решение.</span></h1>
+          <p className="mt-3 text-label leading-5 text-text-2">
+            Куда пойдёт цена: выше или ниже? Сделайте прогноз на реальные котировки с игровыми Coins. Без регистрации.
           </p>
-          <div className="mt-4 flex items-center gap-2 rounded-control bg-surface-2 px-3 py-2.5">
+          <div className="welcome-balance mt-5">
             <CoinMark size={22} />
             <span className="tnum text-body font-semibold">10 000 Coins</span>
             <span className="text-label text-text-3">на старт</span>
@@ -119,13 +121,12 @@ export function Onboarding() {
               void play();
             }}
           >
-            <label htmlFor="nickname" className="text-label font-medium text-text-2">
-              Ваш ник в рейтингах
+            <label htmlFor="nickname" className="text-caption font-medium text-text-2">
+              Ваш игровой ник
             </label>
             <div
-              className={`mt-1.5 flex h-[var(--h-amount)] items-center rounded-control border bg-surface-2 pl-4 pr-1.5 transition-colors duration-[var(--t-fast)] focus-within:border-accent/60 ${
-                problem ? 'border-down/60' : 'border-hairline'
-              }`}
+              className="nickname-well"
+              style={problem ? { borderColor: 'var(--color-down)' } : undefined}
             >
               <input
                 id="nickname"
@@ -135,7 +136,7 @@ export function Onboarding() {
                 autoCapitalize="off"
                 spellCheck={false}
                 onChange={(e) => setNickname(e.target.value)}
-                className="min-w-0 flex-1 bg-transparent text-emph font-semibold outline-none placeholder:text-text-3"
+                className="min-w-0 flex-1 bg-transparent text-body font-medium outline-none placeholder:text-text-3"
                 placeholder="Придумайте ник"
                 aria-invalid={problem ? true : undefined}
                 aria-describedby="nickname-hint"
@@ -143,7 +144,7 @@ export function Onboarding() {
               <button
                 type="button"
                 onClick={suggest}
-                className="grid size-11 place-items-center rounded-[10px] text-text-2 active:bg-surface-3"
+                className="icon-control"
                 aria-label="Другой вариант ника"
               >
                 <Icon name="dice" />
@@ -171,14 +172,14 @@ export function Onboarding() {
                 <span className="text-text-3">Латиница или кириллица, цифры и подчёркивание</span>
               )}
             </div>
-            <motion.button
+            <button
               type="submit"
               disabled={busy || !nickname.trim() || check.state === 'problem' || check.state === 'checking'}
-              whileTap={{ scale: 0.98 }}
-              className="mt-3 h-[var(--h-action)] w-full rounded-card bg-accent text-emph font-semibold text-accent-ink shadow-raise transition-opacity duration-[var(--t-fast)] disabled:opacity-50"
+              className="primary-button mt-3"
             >
               {busy ? 'Создаём игрока...' : 'Играть'}
-            </motion.button>
+              <Icon name="chevronRight" size={18} />
+            </button>
           </form>
           <p className="mt-3 text-center text-caption text-text-3">
             Coins - игровая валюта. Их нельзя вывести или обменять на деньги.

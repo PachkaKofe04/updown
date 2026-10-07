@@ -23,7 +23,7 @@ export function Segmented<T extends string | number>({
 }) {
   const id = useId();
   return (
-    <div role="radiogroup" aria-label={label} className="flex h-[var(--h-control)] gap-1 rounded-control bg-surface-2 p-1">
+    <div role="radiogroup" aria-label={label} className="segmented">
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -34,12 +34,12 @@ export function Segmented<T extends string | number>({
             aria-checked={active}
             disabled={o.disabled}
             onClick={() => onChange(o.value)}
-            className="relative flex-1 rounded-[10px] text-label font-semibold text-text-2 transition-colors duration-[var(--t-fast)] disabled:opacity-35 aria-checked:text-text-1"
+            className="segment"
           >
             {active && (
               <motion.span
                 layoutId={`seg-${id}`}
-                className="absolute inset-0 rounded-[10px] bg-surface-3 shadow-raise"
+                className="segment-indicator"
                 transition={{ type: 'spring', stiffness: 520, damping: 40, mass: 0.7 }}
               />
             )}

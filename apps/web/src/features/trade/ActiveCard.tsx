@@ -38,18 +38,18 @@ export function ActiveCard({ prediction: p, more }: { prediction: PredictionDto;
   const accent = up ? 'text-up' : 'text-down';
 
   return (
-    <div className="flex h-16 items-center gap-3 rounded-card border border-hairline-strong bg-surface-1/90 px-4 shadow-float backdrop-blur-md">
-      <span className={`grid size-8 place-items-center rounded-full ${up ? 'bg-up-soft' : 'bg-down-soft'} ${accent}`}>
+    <div className="prediction-card">
+      <span className={`prediction-symbol ${accent}`}>
         <Icon name={up ? 'arrowUp' : 'arrowDown'} size={18} strokeWidth={2.2} />
       </span>
       <div className="min-w-0 flex-1 leading-tight">
-        <div className="tnum flex items-baseline gap-1.5 text-label font-semibold">
-          {formatCoins(p.stake)}
-          <span className="truncate text-caption font-normal text-text-3">
-            {asset?.displayName} · вход {asset ? formatPrice(p.entry.price, asset.priceScale) : p.entry.price}
-          </span>
+        <div className="tnum flex items-baseline gap-2 text-label font-semibold">
+          <span className={accent}>{up ? 'UP' : 'DOWN'}</span>
+          {asset?.displayName}
+          <span className="text-caption font-normal text-text-2">{formatCoins(p.stake)}</span>
         </div>
-        <div className={`mt-0.5 text-caption font-medium ${settling ? 'text-text-2' : flat ? 'text-text-2' : winning ? 'text-up' : 'text-down'}`}>
+        <div className="tnum mt-1 text-[10px] text-text-3">Вход {asset ? formatPrice(p.entry.price, asset.priceScale) : p.entry.price}</div>
+        <div className={`mt-1 text-[10px] font-medium ${settling ? 'text-text-2' : flat ? 'text-text-2' : winning ? 'text-up' : 'text-down'}`}>
           {settling
             ? 'Фиксируем результат...'
             : flat
@@ -60,9 +60,9 @@ export function ActiveCard({ prediction: p, more }: { prediction: PredictionDto;
           {more > 0 && <span className="text-text-3"> · ещё {more}</span>}
         </div>
       </div>
-      <div className={`relative grid size-11 place-items-center ${urgent ? 'animate-pulse' : ''}`}>
+      <div className={`timer-display relative grid size-12 shrink-0 place-items-center ${urgent ? 'animate-pulse' : ''}`}>
         <svg viewBox="0 0 44 44" className="absolute inset-0 -rotate-90">
-          <circle cx="22" cy="22" r="19" fill="none" stroke="rgb(160 180 220 / 0.14)" strokeWidth="3" />
+          <circle cx="22" cy="22" r="19" fill="none" stroke="rgb(173 198 218 / 0.12)" strokeWidth="2" />
           <circle
             ref={ringRef}
             cx="22"
@@ -70,7 +70,7 @@ export function ActiveCard({ prediction: p, more }: { prediction: PredictionDto;
             r="19"
             fill="none"
             stroke="currentColor"
-            strokeWidth="3"
+            strokeWidth="2"
             strokeLinecap="round"
             pathLength={1}
             strokeDasharray="1"

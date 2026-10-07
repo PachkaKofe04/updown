@@ -43,15 +43,9 @@ export function Icon({ name, size = 20, strokeWidth = 1.75, ...rest }: { name: I
 export function CoinMark({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-      <defs>
-        <linearGradient id="coin-g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#ecd08a" />
-          <stop offset="1" stopColor="#b8913f" />
-        </linearGradient>
-      </defs>
-      <circle cx="12" cy="12" r="10" fill="url(#coin-g)" />
-      <circle cx="12" cy="12" r="7.6" fill="none" stroke="#6b5016" strokeOpacity=".35" strokeWidth="1" />
-      <path d="M8.6 10.4 12 7.2l3.4 3.2M8.6 13.6 12 16.8l3.4-3.2" fill="none" stroke="#4a370d" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="10" fill="#293e4d" stroke="#9bbbd2" strokeWidth=".8" />
+      <circle cx="12" cy="12" r="7.6" fill="none" stroke="#9bbbd2" strokeOpacity=".25" strokeWidth="1" />
+      <path d="M8.6 10.4 12 7.2l3.4 3.2M8.6 13.6 12 16.8l3.4-3.2" fill="none" stroke="#c3dbea" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

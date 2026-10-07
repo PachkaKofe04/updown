@@ -14,11 +14,11 @@ const VOID_TEXT: Record<VoidReason, string> = {
 /** Итог прогноза. Проигрыш - спокойно, без унижения. */
 export function ResultCard({ p, streak }: { p: PredictionDto; streak: number }) {
   const net = p.netResult ?? 0;
-  const base = 'flex h-16 items-center gap-3 rounded-card border bg-surface-1/90 px-4 shadow-float backdrop-blur-md';
+  const base = 'prediction-card';
   if (p.status === 'won') {
     return (
       <div className={`${base} border-up/40`}>
-        <span className="grid size-9 place-items-center rounded-full bg-up-soft text-up">
+        <span className="prediction-symbol text-up">
           <Icon name="check" size={20} strokeWidth={2.2} />
         </span>
         <div className="min-w-0 flex-1 leading-tight">
@@ -34,7 +34,7 @@ export function ResultCard({ p, streak }: { p: PredictionDto; streak: number }) 
   if (p.status === 'lost') {
     return (
       <div className={`${base} border-hairline-strong`}>
-        <span className="grid size-9 place-items-center rounded-full bg-surface-3 text-text-2">
+        <span className="prediction-symbol text-text-2">
           <Icon name={p.direction === 'UP' ? 'arrowDown' : 'arrowUp'} size={18} strokeWidth={2.2} />
         </span>
         <div className="min-w-0 flex-1 leading-tight">
@@ -47,7 +47,7 @@ export function ResultCard({ p, streak }: { p: PredictionDto; streak: number }) 
   }
   return (
     <div className={`${base} border-hairline-strong`}>
-      <span className="grid size-9 place-items-center rounded-full bg-surface-3 text-text-2">
+      <span className="prediction-symbol text-text-2">
         <Icon name="minus" size={18} strokeWidth={2.2} />
       </span>
       <div className="min-w-0 flex-1 leading-tight">

@@ -12,6 +12,7 @@ import { useSession } from '@/shared/state/session';
 import { useTrade } from '@/shared/state/trade';
 import { BottomNav } from '@/shared/ui/BottomNav';
 import { Icon } from '@/shared/ui/Icon';
+import { Wordmark } from '@/shared/ui/Wordmark';
 import { VerifySheet } from './VerifySheet';
 
 export function HistoryScreen() {
@@ -41,11 +42,12 @@ export function HistoryScreen() {
   const winRate = stats && decided > 0 ? Math.round((stats.wins / decided) * 100) : null;
 
   return (
-    <div className="mx-auto flex h-dvh max-w-[480px] flex-col">
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-[calc(var(--safe-top)+12px)]">
-        <h1 className="text-title font-semibold">История</h1>
+    <div className="history-shell">
+      <main className="history-main">
+        <div className="history-heading"><h1 className="history-title">История</h1><Wordmark /></div>
+        <p className="text-label text-text-2">Ваши решения и их результаты.</p>
         {stats && (
-          <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="history-stats">
             <Stat label="Прогнозов" value={String(stats.total)} />
             <Stat label="Точность" value={winRate === null ? '-' : `${winRate}%`} />
             <Stat label="Лучшая серия" value={String(stats.bestStreak)} />
@@ -96,9 +98,9 @@ export function HistoryScreen() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-card border border-hairline bg-surface-1 px-3 py-2.5">
+    <div className="material history-stat">
       <div className="text-caption text-text-3">{label}</div>
-      <div className="tnum mt-0.5 text-emph font-semibold">{value}</div>
+      <div className="tnum mt-2 text-title font-medium">{value}</div>
     </div>
   );
 }
@@ -117,9 +119,9 @@ function Row({ p, name, onOpen }: { p: PredictionDto; name: string; onOpen(): vo
     <button
       type="button"
       onClick={onOpen}
-      className="flex h-16 w-full items-center gap-3 rounded-card border border-hairline bg-surface-1 px-3 text-left transition-colors duration-[var(--t-fast)] active:bg-surface-2"
+      className="history-row"
     >
-      <AssetGlyph assetId={p.assetId} size={34} />
+      <AssetGlyph assetId={p.assetId} size={38} />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5 text-label font-semibold">
           {name}
@@ -138,7 +140,8 @@ function Row({ p, name, onOpen }: { p: PredictionDto; name: string; onOpen(): vo
 
 function Empty({ text }: { text: string }) {
   return (
-    <div className="mt-10 flex flex-col items-center gap-4 text-center">
+    <div className="material mt-8 flex flex-col items-center gap-4 rounded-card px-5 py-10 text-center">
+      <Icon name="history" size={32} className="text-accent" />
       <p className="max-w-[260px] text-body text-text-2">{text}</p>
       <Link href="/" className="rounded-control bg-surface-2 px-5 py-3 text-label font-semibold text-text-1">
         К торговле

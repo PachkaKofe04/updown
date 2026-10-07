@@ -1,5 +1,5 @@
 // Отрисовка графика на canvas: непрерывная ось времени, плавное масштабирование без прыжков,
-// честная линия (цена держится до следующего тика, переход - после момента получения),
+// монотонная интерполяция полученных котировок без вымышленных экстремумов,
 // маркеры прогнозов: вход, зона выигрыша, экспирация, итог.
 
 export type MarkerState = 'pending' | 'open' | 'won' | 'lost' | 'tie' | 'void';
@@ -29,23 +29,23 @@ export interface ChartFrame {
 }
 
 const COLORS = {
-  line: '#8ea4ff',
-  lineStale: '#5e687a',
-  grid: 'rgba(160, 180, 220, 0.07)',
-  axisText: '#7a8599',
-  surface: '#0d1117',
-  pillText: '#060a1a',
-  up: '#24c9a6',
-  down: '#f45b69',
-  neutral: '#8c96a8',
+  line: '#b6d7ed',
+  lineStale: '#738493',
+  grid: 'rgba(173, 198, 218, 0.075)',
+  axisText: '#8397a7',
+  surface: '#101820',
+  pillText: '#10202b',
+  up: '#61dcb1',
+  down: '#f48f9a',
+  neutral: '#a0adba',
 };
 
 const MIN_GUTTER = 56;
 const TOP_PAD = 18;
 const BOTTOM_PAD = 24;
 const OVERLAY_GAP = 10;
-const RAMP_MS = 180;
 const HEAD_ANIM_MS = 220;
+const SAMPLE_MS = 500;
 
 /** Окно по выбранному интервалу: история слева от "сейчас" и будущая зона справа. */
 const WINDOWS: Record<number, { history: number; future: number }> = {
@@ -96,6 +96,12 @@ export class ChartRenderer {
   private headStart = 0;
   private lastTickTime = Number.NaN;
   private reduceMotion = false;
+  private sampled: LinePoint[] = [];
+  private sampledFirst = Number.NaN;
+  private sampledLast = Number.NaN;
+  private sampledCount = 0;
+  private wasLive: boolean | null = null;
+  private gaps: QuoteGap[] = [];
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -123,6 +129,10 @@ export class ChartRenderer {
     this.headFrom = Number.NaN;
     this.headTo = Number.NaN;
     this.lastTickTime = Number.NaN;
+    this.sampled = [];
+    this.sampledCount = 0;
+    this.wasLive = null;
+    this.gaps = [];
   }
 
   draw(f: ChartFrame, dt: number): void {
@@ -156,6 +166,14 @@ export class ChartRenderer {
     // Голова линии: новый тик анимируется от прежнего значения.
     const lastT = f.times[n - 1]!;
     const lastP = f.prices[n - 1]!;
+    // Разрывы, которые клиент наблюдал сам, не соединяем декоративной кривой.
+    if (this.wasLive === true && !f.live) this.gaps.push({ start: f.now, end: null });
+    if (this.wasLive === false && f.live) {
+      const gap = this.gaps[this.gaps.length - 1];
+      if (gap && gap.end === null) gap.end = lastT >= gap.start ? lastT : f.now;
+    }
+    this.wasLive = f.live;
+    this.gaps = this.gaps.filter((g) => g.end === null || g.end >= t0);
     if (lastT !== this.lastTickTime) {
       const shown = this.headValue(f.now);
       this.headFrom = Number.isNaN(shown) ? lastP : shown;
@@ -216,7 +234,7 @@ export class ChartRenderer {
 
     this.drawGrid(f, plotW, plotH, t0, t1, X, Y, Y(head));
     this.drawZones(f, plotW, X, Y);
-    this.drawLine(f, i0, plotW, plotH, X, Y, head);
+    this.drawLine(f, plotW, plotH, X, Y, head);
     this.drawMarkers(f, plotW, X, Y);
     this.drawHead(f, plotW, X, Y, head);
   }
@@ -292,8 +310,8 @@ export class ChartRenderer {
     // Граница "сейчас": тонкая линия, справа от неё будущая зона чуть светлее.
     const xn = X(f.now);
     const g = ctx.createLinearGradient(xn, 0, plotW, 0);
-    g.addColorStop(0, 'rgba(142, 164, 255, 0.045)');
-    g.addColorStop(1, 'rgba(142, 164, 255, 0)');
+    g.addColorStop(0, 'rgba(169, 202, 231, 0.045)');
+    g.addColorStop(1, 'rgba(169, 202, 231, 0)');
     ctx.fillStyle = g;
     ctx.fillRect(xn, TOP_PAD, plotW - xn, plotH);
   }
@@ -319,7 +337,6 @@ export class ChartRenderer {
 
   private drawLine(
     f: ChartFrame,
-    i0: number,
     plotW: number,
     plotH: number,
     X: (t: number) => number,
@@ -327,27 +344,60 @@ export class ChartRenderer {
     head: number,
   ): void {
     const { ctx } = this;
-    const xNow = X(f.now);
-    const points = linePoints(f.times, f.prices, i0, f.now, head, X);
+    const n = f.times.length;
+    const lastT = f.times[n - 1]!;
+    // Отбор истории выполняется при изменении буфера, а не 60 раз в секунду.
+    // Группы привязаны ко времени источника: скролл не перестраивает готовую историю.
+    if (this.sampledCount !== n || this.sampledFirst !== f.times[0] || this.sampledLast !== lastT) {
+      this.sampled = linePoints(f.times, f.prices, 0, lastT, f.prices[n - 1]!, (t) => t);
+      this.sampledCount = n;
+      this.sampledFirst = f.times[0]!;
+      this.sampledLast = lastT;
+    }
+    const points: LinePoint[] = [];
+    for (let i = 0; i < this.sampled.length; i++) {
+      const p = this.sampled[i]!;
+      if (i + 1 < this.sampled.length && X(this.sampled[i + 1]!.x) < 0) continue;
+      points.push({ x: p.x, p: i === this.sampled.length - 1 ? head : p.p });
+    }
+    const tail = points[points.length - 1];
+    if (tail && f.now > tail.x) points.push({ x: f.now, p: head });
+    if (points.length === 0) return;
+    const runs = splitAtGaps(points, this.gaps);
+    ctx.save();
     ctx.beginPath();
-    points.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, Y(pt.p)) : ctx.lineTo(pt.x, Y(pt.p))));
-
-    ctx.lineWidth = 2;
+    ctx.rect(0, 0, plotW, this.height - BOTTOM_PAD);
+    ctx.clip();
+    ctx.lineWidth = 2.2;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     const color = f.live ? COLORS.line : COLORS.lineStale;
-    ctx.strokeStyle = color;
-    ctx.stroke();
-
-    // Заливка под линией: лёгкая вуаль цвета линии.
-    ctx.lineTo(xNow, TOP_PAD + plotH);
-    ctx.lineTo(Math.max(0, X(f.times[i0]!)), TOP_PAD + plotH);
-    ctx.closePath();
+    // Мягкий свет остаётся у кромки, не размывая сам контур.
+    ctx.shadowColor = hexA(color, f.live ? 0.24 : 0);
+    ctx.shadowBlur = 8;
     const g = ctx.createLinearGradient(0, TOP_PAD, 0, TOP_PAD + plotH);
-    g.addColorStop(0, hexA(color, 0.16));
+    g.addColorStop(0, hexA(color, 0.13));
+    g.addColorStop(0.7, hexA(color, 0.025));
     g.addColorStop(1, hexA(color, 0));
-    ctx.fillStyle = g;
-    ctx.fill();
+    for (const run of runs) {
+      const mapped = run.map((p) => ({ x: X(p.x), p: p.p }));
+      ctx.beginPath();
+      ctx.moveTo(mapped[0]!.x, Y(mapped[0]!.p));
+      for (const s of monotoneSegments(mapped)) {
+        ctx.bezierCurveTo(s.c1.x, Y(s.c1.p), s.c2.x, Y(s.c2.p), s.to.x, Y(s.to.p));
+      }
+      ctx.shadowBlur = 8;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      // Каждый участок имеет свою заливку: разрыв остаётся пустым.
+      ctx.lineTo(mapped[mapped.length - 1]!.x, TOP_PAD + plotH);
+      ctx.lineTo(mapped[0]!.x, TOP_PAD + plotH);
+      ctx.closePath();
+      ctx.fillStyle = g;
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   private drawMarkers(f: ChartFrame, plotW: number, X: (t: number) => number, Y: (p: number) => number): void {
@@ -389,7 +439,7 @@ export class ChartRenderer {
 
       // Точка входа со стрелкой направления.
       if (xa >= -6 && xa <= plotW) {
-        this.dot(xa, ye, color, m.state === 'pending' ? 0.5 + 0.5 * Math.sin(f.now / 120) : 1);
+        this.dot(xa, ye, color, m.state === 'pending' && !this.reduceMotion ? 0.5 + 0.5 * Math.sin(f.now / 120) : 1);
         ctx.fillStyle = color;
         ctx.beginPath();
         const dir = m.direction === 'UP' ? -1 : 1;
@@ -477,11 +527,38 @@ export class ChartRenderer {
   }
 }
 
+export interface LinePoint { x: number; p: number }
+export interface QuoteGap { start: number; end: number | null }
+export interface CurveSegment {
+  from: LinePoint;
+  to: LinePoint;
+  c1: LinePoint;
+  c2: LinePoint;
+}
+
+/** Подтверждённый разрыв отделяет участки даже при отсутствии тиков внутри него. */
+export function splitAtGaps(points: LinePoint[], gaps: QuoteGap[]): LinePoint[][] {
+  const runs: LinePoint[][] = [];
+  let run: LinePoint[] = [];
+  for (const point of points) {
+    const inside = gaps.some((g) => point.x >= g.start && (g.end === null || point.x < g.end));
+    const previous = run[run.length - 1];
+    const crosses = previous && gaps.some((g) => previous.x < g.start && point.x >= (g.end ?? Infinity));
+    if (inside || crosses) {
+      if (run.length > 0) runs.push(run);
+      run = [];
+    }
+    if (!inside) run.push(point);
+  }
+  if (run.length > 0) runs.push(run);
+  return runs;
+}
+
 /**
- * Точки линии цены (x в пикселях, p - цена). Цена держится до следующего тика, переход занимает
- * не больше RAMP_MS после момента получения тика. Тики одного столбца пикселей прореживаются,
- * но столбец "достраивается" до последнего значения: иначе следующий отрезок пошёл бы
- * диагональю от пропущенного тика и показал движение цены, которого не было.
+ * Реальные цены закрытия интервалов 500 мс вместо микросекундных пачек котировок.
+ * Время и цена выбранной котировки сохраняются; внутри интервала линия не отражает
+ * каждый тик. Полный поток и точные маркеры прогнозов хранятся независимо от выборки.
+ * Только последний тик получает анимированную цену; после него новых движений нет.
  */
 export function linePoints(
   times: number[],
@@ -490,41 +567,87 @@ export function linePoints(
   now: number,
   head: number,
   X: (t: number) => number,
-): { x: number; p: number }[] {
-  const n = times.length;
-  const out: { x: number; p: number }[] = [];
-  if (n === 0) return out;
-  let prev = prices[i0]!;
-  let lastColumn = Number.NEGATIVE_INFINITY;
-  let columnTail: { x: number; p: number } | null = null;
-  out.push({ x: Math.max(0, X(times[i0]!)), p: prev });
-  for (let i = i0 + 1; i < n; i++) {
-    const t = times[i]!;
-    const p = prices[i]!;
-    const x = X(t);
-    const column = Math.floor(x);
-    const nextT = i + 1 < n ? times[i + 1]! : now;
-    const rampEnd = Math.min(t + RAMP_MS, nextT, now);
-    const isLast = i === n - 1;
-    if (column === lastColumn && !isLast) {
-      columnTail = { x: X(rampEnd), p };
-      prev = p;
-      continue;
+): LinePoint[] {
+  const n = Math.min(times.length, prices.length);
+  const out: LinePoint[] = [];
+  if (n === 0 || i0 >= n) return out;
+  let first = Math.max(0, i0);
+  const append = (i: number) => {
+    const point = { x: X(times[i]!), p: i === n - 1 ? head : prices[i]! };
+    const last = out[out.length - 1];
+    if (last && point.x === last.x) out[out.length - 1] = point;
+    else if (!last || point.x > last.x) out.push(point);
+  };
+  while (first < n) {
+    const column = Math.floor(times[first]! / SAMPLE_MS);
+    let last = first;
+    while (last + 1 < n && Math.floor(times[last + 1]! / SAMPLE_MS) === column) {
+      last++;
     }
-    if (columnTail) {
-      out.push(columnTail);
-      columnTail = null;
-    }
-    lastColumn = column;
-    out.push({ x, p: prev });
-    out.push({ x: X(rampEnd), p: isLast ? head : p });
-    prev = p;
+    append(last);
+    first = last + 1;
   }
-  if (columnTail) out.push(columnTail);
-  out.push({ x: X(now), p: head });
+  const tail = out[out.length - 1];
+  const xNow = X(now);
+  if (tail && xNow > tail.x) out.push({ x: xNow, p: head });
   return out;
 }
 
+/**
+ * Кубическая интерполяция Эрмита с ограничением касательных.
+ * Кривая проходит через каждый сохранённый тик. При смене направления касательная
+ * нулевая; ограничитель не позволяет кривой выйти за цены соседних котировок.
+ */
+export function monotoneSegments(points: LinePoint[]): CurveSegment[] {
+  if (points.length < 2) return [];
+  const spans: number[] = [];
+  const slopes: number[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const dx = points[i + 1]!.x - points[i]!.x;
+    if (dx <= 0) throw new Error('Curve points must have increasing x');
+    spans.push(dx);
+    slopes.push((points[i + 1]!.p - points[i]!.p) / dx);
+  }
+  const tangents = [slopes[0]!];
+  for (let i = 1; i < points.length - 1; i++) {
+    const a = slopes[i - 1]!;
+    const b = slopes[i]!;
+    if (a * b <= 0) tangents.push(0);
+    else {
+      const w1 = 2 * spans[i]! + spans[i - 1]!;
+      const w2 = spans[i]! + 2 * spans[i - 1]!;
+      tangents.push((w1 + w2) / (w1 / a + w2 / b));
+    }
+  }
+  tangents.push(slopes[slopes.length - 1]!);
+  for (let i = 0; i < slopes.length; i++) {
+    const d = slopes[i]!;
+    if (d === 0) {
+      tangents[i] = 0;
+      tangents[i + 1] = 0;
+      continue;
+    }
+    const a = tangents[i]! / d;
+    const b = tangents[i + 1]! / d;
+    const magnitude = Math.hypot(a, b);
+    if (magnitude > 3) {
+      const limit = 3 / magnitude;
+      tangents[i] = limit * a * d;
+      tangents[i + 1] = limit * b * d;
+    }
+  }
+  return slopes.map((_, i) => {
+    const from = points[i]!;
+    const to = points[i + 1]!;
+    const third = spans[i]! / 3;
+    return {
+      from,
+      to,
+      c1: { x: from.x + third, p: from.p + tangents[i]! * third },
+      c2: { x: to.x - third, p: to.p - tangents[i + 1]! * third },
+    };
+  });
+}
 function hexA(hex: string, alpha: number): string {
   const v = Number.parseInt(hex.slice(1), 16);
   return `rgba(${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}, ${alpha})`;
