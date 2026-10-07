@@ -29,6 +29,30 @@ describe('FeedHealth', () => {
     expect(h.isLiveAt(8000)).toBe(true);
   });
 
+  it('heartbeat после долгой паузы без таймера не стирает простой', () => {
+    const h = new FeedHealth(2500);
+    h.setHealthy(true, 0);
+    h.markAlive(10_000);
+    // таймер не срабатывал (задержка event loop): следующий пульс приходит через 10 секунд
+    h.markAlive(20_000);
+    expect(h.isLiveAt(12_499)).toBe(true);
+    expect(h.isLiveAt(12_500)).toBe(false);
+    expect(h.isLiveAt(15_000)).toBe(false);
+    expect(h.isLiveAt(20_000)).toBe(true);
+  });
+
+  it('тишина, обрыв и восстановление без таймера: тишина остаётся простоем', () => {
+    const h = new FeedHealth(2500);
+    h.setHealthy(true, 0);
+    h.markAlive(10_000);
+    h.setHealthy(false, 20_000);
+    h.markAlive(21_000);
+    h.setHealthy(true, 22_000);
+    expect(h.isLiveAt(15_000)).toBe(false);
+    expect(h.isLiveAt(21_500)).toBe(false);
+    expect(h.isLiveAt(22_000)).toBe(true);
+  });
+
   it('рассинхронизация стакана - простой сразу', () => {
     const h = new FeedHealth(2500);
     h.setHealthy(true, 0);

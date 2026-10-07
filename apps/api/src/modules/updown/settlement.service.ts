@@ -7,15 +7,17 @@ import {
   type OnApplicationShutdown,
 } from '@nestjs/common';
 import type { PredictionStatus, StatsDto, VoidReason } from '@updown/contracts';
-import { and, asc, count, eq, lte } from 'drizzle-orm';
+import { and, asc, count, eq, lte, sql } from 'drizzle-orm';
 import { Clock } from '../../common/clock.js';
 import { UserEvents } from '../../common/user-events.js';
 import { ENV, type Env } from '../../config/env.js';
 import { DB, type Db } from '../../db/db.js';
 import { predictions, wallets } from '../../db/schema.js';
+import { AnalyticsService } from '../analytics/analytics.service.js';
 import type { Tick } from '../market/market.types.js';
 import { MarketService } from '../market/market.service.js';
 import { isMarketOpen } from '../market/schedule.js';
+import { msToIsoMicros } from '../market/time.js';
 import { StatsService } from '../stats/stats.service.js';
 import { WalletService } from '../wallet/wallet.service.js';
 import { decideOutcome, payoutFor } from './outcome.js';
@@ -56,6 +58,7 @@ export class SettlementService implements OnApplicationBootstrap, BeforeApplicat
     private readonly wallets: WalletService,
     private readonly stats: StatsService,
     private readonly events: UserEvents,
+    private readonly analytics: AnalyticsService,
   ) {
     this.processStartedAt = clock.now();
   }
@@ -159,7 +162,7 @@ export class SettlementService implements OnApplicationBootstrap, BeforeApplicat
           exitPrice: r.exit?.mid ?? null,
           exitBid: r.exit?.bid ?? null,
           exitAsk: r.exit?.ask ?? null,
-          exitReceivedAt: r.exit ? new Date(r.exit.t) : null,
+          exitReceivedAt: r.exit ? sql`${msToIsoMicros(r.exit.t)}::timestamptz` : null,
           exitSourceTs: r.exit?.sourceTs != null ? new Date(r.exit.sourceTs) : null,
           payoutAmount: payout,
           netResult: net,
@@ -171,6 +174,7 @@ export class SettlementService implements OnApplicationBootstrap, BeforeApplicat
       if (!row) return null;
 
       let balance: number;
+      let walletVersion: number;
       if (payout > 0) {
         const posting = await this.wallets.post(tx, {
           walletId: row.walletId,
@@ -183,20 +187,33 @@ export class SettlementService implements OnApplicationBootstrap, BeforeApplicat
         });
         if (!posting) throw new Error(`settlement posting for ${row.id} was unexpectedly skipped`);
         balance = posting.balanceAfter;
+        walletVersion = posting.walletSeq;
       } else {
-        const [w] = await tx.select({ balance: wallets.balance }).from(wallets).where(eq(wallets.id, row.walletId));
+        const [w] = await tx
+          .select({ balance: wallets.balance, version: wallets.ledgerSeq })
+          .from(wallets)
+          .where(eq(wallets.id, row.walletId));
         balance = w?.balance ?? 0;
+        walletVersion = w?.version ?? 0;
       }
       const stats: StatsDto = await this.stats.applySettlement(tx, row.userId, r.status, row.stake, net);
-      return { row, balance, stats };
+      return { row, balance, walletVersion, stats };
     });
     if (!result) return;
 
+    this.analytics.track('prediction_settled', result.row.userId, {
+      status: r.status,
+      asset: result.row.assetId,
+      duration: result.row.durationSec,
+      net,
+      void_reason: r.voidReason,
+    });
     this.events.emitPrediction({
       userId: result.row.userId,
       kind: 'prediction.settled',
       prediction: toPredictionDto(result.row),
       balance: result.balance,
+      walletVersion: result.walletVersion,
       stats: result.stats,
     });
   }

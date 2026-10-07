@@ -5,6 +5,8 @@ import { ApiExceptionFilter } from './common/errors.js';
 import { ENV, type Env } from './config/env.js';
 import { DbModule } from './db/db.module.js';
 import { HealthController } from './health.controller.js';
+import { AnalyticsModule } from './modules/analytics/analytics.module.js';
+import { BonusModule } from './modules/bonus/bonus.module.js';
 import { IdentityModule } from './modules/identity/identity.module.js';
 import { MarketModule } from './modules/market/market.module.js';
 import { RealtimeModule } from './modules/realtime/realtime.module.js';
@@ -31,9 +33,11 @@ export class AppModule {
         DbModule,
         WalletModule,
         StatsModule,
+        AnalyticsModule,
         IdentityModule,
         MarketModule,
         UpdownModule,
+        BonusModule,
         RealtimeModule,
       ],
       controllers: [HealthController],

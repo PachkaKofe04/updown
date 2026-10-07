@@ -5,6 +5,7 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { AssetGlyph } from '@/features/trade/AssetGlyph';
+import { track } from '@/shared/lib/analytics';
 import { api } from '@/shared/lib/api';
 import { DURATION_LABEL, formatClock, formatCoins, formatSignedCoins } from '@/shared/lib/format';
 import { useMarket } from '@/shared/state/market';
@@ -18,26 +19,31 @@ import { VerifySheet } from './VerifySheet';
 export function HistoryScreen() {
   const status = useSession((s) => s.status);
   const stats = useSession((s) => s.me?.stats);
+  const userId = useSession((s) => s.me?.user.id);
   const assets = useMarket((s) => s.assets);
-  const settledCount = useTrade((s) => s.settled.length);
-  const openCount = useTrade((s) => Object.keys(s.open).length);
+  const revision = useTrade((s) => s.revision);
   const client = useQueryClient();
-  const [selected, setSelected] = useState<PredictionDto | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const query = useInfiniteQuery({
-    queryKey: ['predictions'],
+    // кэш привязан к игроку: после входа в другой аккаунт чужая история не покажется
+    queryKey: ['predictions', userId],
     queryFn: ({ pageParam }) => api.predictions(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: status === 'ready',
   });
 
+  useEffect(() => track('history_opened'), []);
+
   // новый прогноз или результат - список обновляется сам
   useEffect(() => {
     void client.invalidateQueries({ queryKey: ['predictions'] });
-  }, [settledCount, openCount, client]);
+  }, [revision, client]);
 
   const items = query.data?.pages.flatMap((p) => p.items) ?? [];
+  // открытая проверка берёт свежую версию из списка: идущий прогноз сменится итогом без закрытия шторки
+  const selected: PredictionDto | null = items.find((p) => p.id === selectedId) ?? null;
   const decided = stats ? stats.wins + stats.losses : 0;
   const winRate = stats && decided > 0 ? Math.round((stats.wins / decided) * 100) : null;
 
@@ -64,14 +70,36 @@ export function HistoryScreen() {
             ))}
           </div>
         )}
-        {status === 'ready' && !query.isPending && items.length === 0 && (
+        {status === 'ready' && query.isError && (
+          <div className="material mt-4 flex items-center justify-between gap-3 rounded-card px-4 py-3" role="alert">
+            <span className="text-label text-text-2">
+              {items.length > 0 ? 'Не удалось обновить историю.' : 'Не удалось загрузить историю.'}
+            </span>
+            <button
+              type="button"
+              onClick={() => void query.refetch()}
+              disabled={query.isFetching}
+              className="h-11 shrink-0 rounded-control bg-surface-2 px-4 text-label font-semibold text-text-1"
+            >
+              {query.isFetching ? 'Загружаем...' : 'Повторить'}
+            </button>
+          </div>
+        )}
+        {status === 'ready' && query.isSuccess && items.length === 0 && (
           <Empty text="Пока нет прогнозов. Первый - на экране торговли." />
         )}
 
         <ul className="mt-4 space-y-2 pb-4">
           {items.map((p) => (
             <li key={p.id}>
-              <Row p={p} name={assets.find((a) => a.id === p.assetId)?.displayName ?? p.assetId} onOpen={() => setSelected(p)} />
+              <Row
+                p={p}
+                name={assets.find((a) => a.id === p.assetId)?.displayName ?? p.assetId}
+                onOpen={() => {
+                  setSelectedId(p.id);
+                  track('verify_opened', { status: p.status });
+                }}
+              />
             </li>
           ))}
         </ul>
@@ -90,7 +118,7 @@ export function HistoryScreen() {
       <VerifySheet
         prediction={selected}
         asset={assets.find((a) => a.id === selected?.assetId)}
-        onClose={() => setSelected(null)}
+        onClose={() => setSelectedId(null)}
       />
     </div>
   );

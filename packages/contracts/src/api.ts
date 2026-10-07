@@ -56,8 +56,11 @@ export const MeDtoSchema = z.object({
     id: z.string(),
     kind: z.enum(['guest', 'registered']),
     nickname: z.string(),
+    /** Привязанная почта в виде "a***@mail.ru" (полный адрес клиенту не нужен). */
+    email: z.string().nullable(),
   }),
-  wallet: z.object({ balance: Coins, peakBalance: Coins }),
+  // version - номер последней проводки кошелька: клиент не применяет состояние старее уже показанного
+  wallet: z.object({ balance: Coins, peakBalance: Coins, version: z.number().int() }),
   stats: StatsDtoSchema,
 });
 export type MeDto = z.infer<typeof MeDtoSchema>;
@@ -104,6 +107,7 @@ export type CreatePredictionBody = z.infer<typeof CreatePredictionBodySchema>;
 export const CreatePredictionResponseSchema = z.object({
   prediction: PredictionDtoSchema,
   balance: Coins,
+  walletVersion: z.number().int(),
 });
 export type CreatePredictionResponse = z.infer<typeof CreatePredictionResponseSchema>;
 

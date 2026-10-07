@@ -1,7 +1,11 @@
 import type {
   AssetDto,
+  ComebackClaimResponse,
+  ComebackStatus,
   CreatePredictionBody,
   CreatePredictionResponse,
+  EmailStartResponse,
+  EmailVerifyResponse,
   ErrorCode,
   MeDto,
   NicknameCheckResponse,
@@ -57,4 +61,14 @@ export const api = {
   predictions: (cursor?: string) =>
     request<PredictionListResponse>(`/v1/predictions${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
   prediction: (id: string) => request<PredictionDto>(`/v1/predictions/${id}`),
+  emailStart: (email: string) =>
+    request<EmailStartResponse>('/v1/auth/email/start', { method: 'POST', body: JSON.stringify({ email }) }),
+  emailVerify: (email: string, code: string, action: 'link' | 'login') =>
+    request<EmailVerifyResponse>('/v1/auth/email/verify', {
+      method: 'POST',
+      body: JSON.stringify({ email, code, action }),
+    }),
+  logout: () => request<void>('/v1/auth/logout', { method: 'POST' }),
+  comebackStatus: () => request<ComebackStatus>('/v1/bonus/comeback'),
+  comebackClaim: () => request<ComebackClaimResponse>('/v1/bonus/comeback', { method: 'POST' }),
 };

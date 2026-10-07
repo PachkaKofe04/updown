@@ -2,7 +2,7 @@
 
 import type { AssetDto, Direction } from '@updown/contracts';
 import { formatCoins, profitFor } from '@/shared/lib/format';
-import { useMarket } from '@/shared/state/market';
+import { tradeBlock, useMarket } from '@/shared/state/market';
 import { useSession } from '@/shared/state/session';
 import { useTrade } from '@/shared/state/trade';
 import { Icon } from '@/shared/ui/Icon';
@@ -13,18 +13,23 @@ export function ActionButtons({ asset }: { asset: AssetDto }) {
   const stake = useTrade((s) => s.stake);
   const balance = useSession((s) => s.me?.wallet.balance ?? 0);
   const feed = useMarket((s) => s.feeds[asset.id] ?? asset.feed);
+  const block = useMarket((s) => tradeBlock(s, asset.id));
   const place = usePlacePrediction(asset);
 
   const reason =
-    feed === 'closed'
-      ? 'Рынок закрыт. Выберите криптовалюту - она торгуется круглосуточно.'
-      : feed !== 'live'
-        ? 'Нет свежей котировки. Прогноз откроется, как только цена обновится.'
-        : stake < asset.minStake
-          ? `Минимальная сумма - ${asset.minStake} Coins.`
-          : stake > balance
-            ? 'Недостаточно Coins для этого прогноза.'
-            : null;
+    block === 'reconnecting'
+      ? 'Связь с сервером прервалась. Переподключаемся, цена на экране может быть устаревшей.'
+      : block === 'connecting'
+        ? 'Подключаемся к котировкам...'
+        : feed === 'closed'
+          ? 'Рынок закрыт. Выберите криптовалюту - она торгуется круглосуточно.'
+          : feed !== 'live'
+            ? 'Нет свежей котировки. Прогноз откроется, как только цена обновится.'
+            : stake < asset.minStake
+              ? `Минимальная сумма - ${asset.minStake} Coins.`
+              : stake > balance
+                ? 'Недостаточно Coins для этого прогноза.'
+                : null;
   const profit = profitFor(stake, asset.payoutBps);
 
   return (

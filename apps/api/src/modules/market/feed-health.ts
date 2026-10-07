@@ -23,12 +23,17 @@ export class FeedHealth {
     private readonly retentionMs = 30 * 60_000,
   ) {}
 
+  // Перед каждым изменением состояние сверяется со старыми значениями: если таймер не успел
+  // (задержка event loop), тишина до этого момента всё равно записывается как простой.
+
   markAlive(now: number): void {
+    this.reconcile(now);
     this.lastAliveAt = Math.max(this.lastAliveAt, now);
     this.reconcile(now);
   }
 
   setHealthy(healthy: boolean, now: number): void {
+    this.reconcile(now);
     this.healthy = healthy;
     this.reconcile(now);
   }

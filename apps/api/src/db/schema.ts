@@ -71,6 +71,8 @@ export const authIdentities = pgTable(
   (t) => [
     unique('auth_identities_provider_subject_uq').on(t.provider, t.subject),
     index('auth_identities_user_idx').on(t.userId),
+    // одна почта на игрока: аккаунт однозначно восстанавливается по адресу
+    uniqueIndex('auth_identities_user_provider_uq').on(t.userId, t.provider),
     check('auth_identities_provider_check', sql`${t.provider} in ('telegram', 'google', 'email')`),
   ],
 );
@@ -306,6 +308,49 @@ export const predictions = pgTable(
       'predictions_exit_time_check',
       sql`${t.exitReceivedAt} is null or ${t.exitReceivedAt} <= ${t.expiresAt}`,
     ),
+  ],
+);
+
+// Одноразовые коды входа по почте. Сам код не хранится: только sha256(id:код).
+// Действует последний неиспользованный код адреса; попытки ограничены.
+export const emailCodes = pgTable(
+  'email_codes',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    email: text('email').notNull(),
+    codeHash: text('code_hash').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    ip: inet('ip'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    expiresAt: ts('expires_at').notNull(),
+    consumedAt: ts('consumed_at'),
+  },
+  (t) => [
+    index('email_codes_email_idx').on(t.email, t.createdAt.desc()),
+    check('email_codes_attempts_check', sql`${t.attempts} >= 0`),
+  ],
+);
+
+// События продукта для измерения петли (активация, повторные прогнозы, возвраты).
+// Без персональных данных в props. Клиентские события дедуплицируются по client_event_id.
+export const productEvents = pgTable(
+  'product_events',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    name: text('name').notNull(),
+    source: text('source', { enum: ['server', 'client'] }).notNull(),
+    userId: uuid('user_id').references(() => users.id),
+    deviceId: uuid('device_id'),
+    clientEventId: uuid('client_event_id'),
+    props: jsonb('props').notNull().default(sql`'{}'::jsonb`),
+    occurredAt: ts('occurred_at').notNull().defaultNow(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('product_events_client_event_uq').on(t.clientEventId),
+    index('product_events_name_time_idx').on(t.name, t.occurredAt),
+    index('product_events_user_time_idx').on(t.userId, t.occurredAt),
+    check('product_events_source_check', sql`${t.source} in ('server', 'client')`),
   ],
 );
 

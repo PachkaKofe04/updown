@@ -3,7 +3,7 @@ import { ENV, type Env } from '../../config/env.js';
 import { MarketController } from './market.controller.js';
 import { MARKET_PROVIDER, type MarketDataProvider } from './market.types.js';
 import { MarketService } from './market.service.js';
-import { KrakenProvider } from './providers/kraken.provider.js';
+import { ExchangeProvider } from './providers/exchange.provider.js';
 import { SimulatedProvider } from './providers/simulated.provider.js';
 import { TickWriter } from './tick-writer.js';
 
@@ -15,8 +15,11 @@ import { TickWriter } from './tick-writer.js';
     {
       provide: MARKET_PROVIDER,
       inject: [ENV],
+      // адрес фида обязателен для MARKET_SOURCE=exchange: это проверяет загрузка env
       useFactory: (env: Env): MarketDataProvider =>
-        env.MARKET_SOURCE === 'simulated' ? new SimulatedProvider() : new KrakenProvider(),
+        env.MARKET_SOURCE === 'exchange' && env.MARKET_WS_URL
+          ? new ExchangeProvider(env.MARKET_WS_URL)
+          : new SimulatedProvider(),
     },
   ],
   exports: [MarketService],

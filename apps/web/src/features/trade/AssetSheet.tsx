@@ -1,5 +1,6 @@
 'use client';
 
+import { track } from '@/shared/lib/analytics';
 import { formatPrice } from '@/shared/lib/format';
 import { useMarket } from '@/shared/state/market';
 import { useTrade } from '@/shared/state/trade';
@@ -30,6 +31,7 @@ export function AssetSheet({ open, onClose }: { open: boolean; onClose(): void }
                 type="button"
                 onClick={() => {
                   setAsset(a.id);
+                  track('asset_selected', { asset: a.id });
                   if (!a.durations.includes(duration)) setDuration(a.durations[0] ?? 60);
                   onClose();
                 }}

@@ -5,15 +5,18 @@ import type {
   PredictionDto,
   PredictionListResponse,
 } from '@updown/contracts';
-import { and, count, desc, eq, lt, or } from 'drizzle-orm';
+import { and, count, desc, eq, lt, or, sql } from 'drizzle-orm';
 import { Clock } from '../../common/clock.js';
 import { DomainError } from '../../common/errors.js';
+import { isLockTimeout, isUuidShape } from '../../common/pg-errors.js';
 import { RateLimiter } from '../../common/rate-limit.js';
 import { UserEvents } from '../../common/user-events.js';
 import { ENV, type Env } from '../../config/env.js';
 import { DB, type Db, type Tx } from '../../db/db.js';
 import { predictions } from '../../db/schema.js';
 import { MarketService } from '../market/market.service.js';
+import type { AssetConfig, Tick } from '../market/market.types.js';
+import { msToIsoMicros } from '../market/time.js';
 import { WalletService } from '../wallet/wallet.service.js';
 import { type PredictionRow, toPredictionDto } from './prediction.mapper.js';
 import { SettlementService } from './settlement.service.js';
@@ -42,8 +45,7 @@ export class PredictionsService {
     if (replay) return this.replay(userId, replay, body);
 
     if (this.settlement.isDraining()) throw new DomainError('maintenance');
-    const now = this.clock.now();
-    if (!this.limiter.allow(userId, now)) throw new DomainError('rate_limited');
+    if (!this.limiter.allow(userId, this.clock.now())) throw new DomainError('rate_limited');
 
     const asset = this.market.getAsset(body.assetId);
     if (!asset?.isActive) throw new DomainError('asset_unavailable');
@@ -51,70 +53,94 @@ export class PredictionsService {
     if (body.stake < asset.minStake) {
       throw new DomainError('stake_too_small', `Минимальная сумма прогноза - ${asset.minStake} Coins.`);
     }
+    // Быстрый отказ без транзакции; окончательная проверка - под блокировкой кошелька.
+    this.acceptance(asset, body.durationSec);
 
-    // Цена входа - последняя котировка, полученная сервером к моменту приёма. Клиент цену не присылает.
-    const entry = this.market.latest(asset.id);
-    if (!entry || !this.market.isLiveNow(asset.id)) throw new DomainError('stale_price');
-    const openedAt = Math.max(now, Math.ceil(entry.t));
-    const expiresAt = openedAt + body.durationSec * 1000;
-    if (!this.market.canTrade(asset, openedAt, expiresAt)) throw new DomainError('market_closed');
+    const result = await this.db
+      .transaction(async (tx) => {
+        // Ждать кошелёк долго нельзя: прогноз принимается по цене момента приёма, а не запроса.
+        await tx.execute(sql`set local lock_timeout = '2s'`);
+        // Блокировка кошелька упорядочивает создание прогнозов игрока: лимит открытых и повторы точны.
+        const wallet = await this.wallets.getMainWallet(userId, tx, true);
+        const existing = await this.findByClientRequest(userId, body.clientRequestId, tx);
+        if (existing) {
+          assertSameRequest(existing, body);
+          return { row: existing, balance: wallet.balance, walletVersion: wallet.version, created: false };
+        }
 
-    const result = await this.db.transaction(async (tx) => {
-      // Блокировка кошелька упорядочивает создание прогнозов игрока: лимит открытых и повторы точны.
-      const wallet = await this.wallets.getMainWallet(userId, tx, true);
-      const existing = await this.findByClientRequest(userId, body.clientRequestId, tx);
-      if (existing) return { row: existing, balance: wallet.balance, created: false };
+        // Момент приёма - после получения блокировки: цена, живость фида и расписание проверяются заново.
+        const { entry, openedAt, expiresAt } = this.acceptance(asset, body.durationSec);
 
-      const [open] = await tx
-        .select({ value: count() })
-        .from(predictions)
-        .where(and(eq(predictions.userId, userId), eq(predictions.status, 'open')));
-      if ((open?.value ?? 0) >= MAX_OPEN_PREDICTIONS) throw new DomainError('too_many_open_predictions');
-      if (wallet.balance < body.stake) throw new DomainError('insufficient_funds');
+        const [open] = await tx
+          .select({ value: count() })
+          .from(predictions)
+          .where(and(eq(predictions.userId, userId), eq(predictions.status, 'open')));
+        if ((open?.value ?? 0) >= MAX_OPEN_PREDICTIONS) throw new DomainError('too_many_open_predictions');
+        if (wallet.balance < body.stake) throw new DomainError('insufficient_funds');
 
-      const [row] = await tx
-        .insert(predictions)
-        .values({
-          userId,
+        const [row] = await tx
+          .insert(predictions)
+          .values({
+            userId,
+            walletId: wallet.id,
+            clientRequestId: body.clientRequestId,
+            assetId: asset.id,
+            direction: body.direction,
+            durationSec: body.durationSec,
+            stake: body.stake,
+            payoutBps: asset.payoutBps,
+            priceSource: this.market.priceSource(asset),
+            openedAt: new Date(openedAt),
+            expiresAt: new Date(expiresAt),
+            entryPrice: entry.mid,
+            entryBid: entry.bid,
+            entryAsk: entry.ask,
+            // с микросекундами: ровно время тика в журнале, ссылка на него однозначна
+            entryReceivedAt: sql`${msToIsoMicros(entry.t)}::timestamptz`,
+            entrySourceTs: entry.sourceTs === null ? null : new Date(entry.sourceTs),
+            createdIp: ip,
+          })
+          .returning();
+        if (!row) throw new Error('prediction insert returned nothing');
+
+        const posting = await this.wallets.post(tx, {
           walletId: wallet.id,
-          clientRequestId: body.clientRequestId,
-          assetId: asset.id,
-          direction: body.direction,
-          durationSec: body.durationSec,
-          stake: body.stake,
-          payoutBps: asset.payoutBps,
-          priceSource: this.market.priceSource(asset),
-          openedAt: new Date(openedAt),
-          expiresAt: new Date(expiresAt),
-          entryPrice: entry.mid,
-          entryBid: entry.bid,
-          entryAsk: entry.ask,
-          entryReceivedAt: new Date(entry.t),
-          entrySourceTs: entry.sourceTs === null ? null : new Date(entry.sourceTs),
-          createdIp: ip,
-        })
-        .returning();
-      if (!row) throw new Error('prediction insert returned nothing');
-
-      const posting = await this.wallets.post(tx, {
-        walletId: wallet.id,
-        amount: -body.stake,
-        type: 'GAME_STAKE',
-        idempotencyKey: `updown:stake:${row.id}`,
-        gameType: 'updown',
-        refType: 'prediction',
-        refId: row.id,
+          amount: -body.stake,
+          type: 'GAME_STAKE',
+          idempotencyKey: `updown:stake:${row.id}`,
+          gameType: 'updown',
+          refType: 'prediction',
+          refId: row.id,
+        });
+        if (!posting) throw new Error(`stake posting for ${row.id} was unexpectedly skipped`);
+        return { row, balance: posting.balanceAfter, walletVersion: posting.walletSeq, created: true };
+      })
+      .catch((error: unknown) => {
+        // кошелёк занят другой операцией игрока дольше lock_timeout
+        if (isLockTimeout(error)) throw new DomainError('rate_limited');
+        throw error;
       });
-      if (!posting) throw new Error(`stake posting for ${row.id} was unexpectedly skipped`);
-      return { row, balance: posting.balanceAfter, created: true };
-    });
 
     const prediction = toPredictionDto(result.row);
+    const { balance, walletVersion } = result;
     if (result.created) {
-      this.settlement.schedule(result.row.id, expiresAt);
-      this.events.emitPrediction({ userId, kind: 'prediction.opened', prediction, balance: result.balance, stats: null });
+      this.settlement.schedule(result.row.id, prediction.expiresAt);
+      this.events.emitPrediction({ userId, kind: 'prediction.opened', prediction, balance, walletVersion, stats: null });
     }
-    return { prediction, balance: result.balance };
+    return { prediction, balance, walletVersion };
+  }
+
+  /**
+   * Условия приёма на текущий момент: цена входа - последняя котировка, полученная сервером,
+   * фид жив, интервал целиком в торговом окне. Клиент цену не присылает.
+   */
+  private acceptance(asset: AssetConfig, durationSec: number): { entry: Tick; openedAt: number; expiresAt: number } {
+    const entry = this.market.latest(asset.id);
+    if (!entry || !this.market.isLiveNow(asset.id)) throw new DomainError('stale_price');
+    const openedAt = Math.max(this.clock.now(), Math.ceil(entry.t));
+    const expiresAt = openedAt + durationSec * 1000;
+    if (!this.market.canTrade(asset, openedAt, expiresAt)) throw new DomainError('market_closed');
+    return { entry, openedAt, expiresAt };
   }
 
   async list(userId: string, cursor: string | undefined, limit: number): Promise<PredictionListResponse> {
@@ -145,7 +171,7 @@ export class PredictionsService {
   }
 
   async get(userId: string, id: string): Promise<PredictionDto> {
-    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new DomainError('not_found');
+    if (!isUuidShape(id)) throw new DomainError('not_found');
     const [row] = await this.db
       .select()
       .from(predictions)
@@ -176,20 +202,25 @@ export class PredictionsService {
     row: PredictionRow,
     body: CreatePredictionBody,
   ): Promise<CreatePredictionResponse> {
-    const same =
-      row.assetId === body.assetId &&
-      row.direction === body.direction &&
-      row.durationSec === body.durationSec &&
-      row.stake === body.stake;
-    if (!same) throw new DomainError('idempotency_conflict');
+    assertSameRequest(row, body);
     const wallet = await this.wallets.getMainWallet(userId);
-    return { prediction: toPredictionDto(row), balance: wallet.balance };
+    return { prediction: toPredictionDto(row), balance: wallet.balance, walletVersion: wallet.version };
   }
+}
+
+/** Повтор с тем же ключом допустим только с теми же параметрами - и до транзакции, и под блокировкой. */
+function assertSameRequest(row: PredictionRow, body: CreatePredictionBody): void {
+  const same =
+    row.assetId === body.assetId &&
+    row.direction === body.direction &&
+    row.durationSec === body.durationSec &&
+    row.stake === body.stake;
+  if (!same) throw new DomainError('idempotency_conflict');
 }
 
 function parseCursor(cursor: string | undefined): { openedAt: Date; id: string } | null {
   if (!cursor) return null;
-  const m = /^(\d{10,16})_([0-9a-f-]{36})$/i.exec(cursor);
-  if (!m) return null;
+  const m = /^(\d{10,16})_(.{36})$/.exec(cursor);
+  if (!m || !isUuidShape(m[2]!)) return null;
   return { openedAt: new Date(Number(m[1])), id: m[2]! };
 }

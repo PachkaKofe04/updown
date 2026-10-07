@@ -36,6 +36,20 @@
       "when": 1791186665787,
       "tag": "0004_nickname_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791371528730,
+      "tag": "0005_email_codes_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791373423516,
+      "tag": "0006_neutral_asset_source",
+      "breakpoints": true
     }
   ]
 }

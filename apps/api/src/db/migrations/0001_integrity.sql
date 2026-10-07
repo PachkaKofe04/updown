@@ -103,11 +103,11 @@ CREATE TRIGGER predictions_guard BEFORE UPDATE ON predictions
 CREATE TRIGGER predictions_no_delete BEFORE DELETE ON predictions
   FOR EACH ROW EXECUTE FUNCTION reject_change();
 --> statement-breakpoint
--- Активы первого среза. Источник Kraken: только для разработки и внутренних тестов.
+-- Активы первого среза: котировки биржевого фида.
 -- price_scale = знаков после запятой у mid (полутик): BTC шаг 0.1, ETH 0.01, FX 0.00001.
 INSERT INTO assets (id, display_name, kind, source, source_symbol, price_scale, schedule, payout_bps, min_stake, durations, is_active, sort_order)
 VALUES
-  ('BTCUSD', 'BTC/USD', 'crypto', 'kraken', 'BTC/USD', 2, '24x7', 8500, 10, '{30,60,180,300}', true, 10),
-  ('ETHUSD', 'ETH/USD', 'crypto', 'kraken', 'ETH/USD', 3, '24x7', 8500, 10, '{30,60,180,300}', true, 20),
-  ('EURUSD', 'EUR/USD', 'fx', 'kraken', 'EUR/USD', 6, 'fx', 8500, 10, '{30,60,180,300}', true, 30),
-  ('GBPUSD', 'GBP/USD', 'fx', 'kraken', 'GBP/USD', 6, 'fx', 8500, 10, '{30,60,180,300}', false, 40);
+  ('BTCUSD', 'BTC/USD', 'crypto', 'exchange', 'BTC/USD', 2, '24x7', 8500, 10, '{30,60,180,300}', true, 10),
+  ('ETHUSD', 'ETH/USD', 'crypto', 'exchange', 'ETH/USD', 3, '24x7', 8500, 10, '{30,60,180,300}', true, 20),
+  ('EURUSD', 'EUR/USD', 'fx', 'exchange', 'EUR/USD', 6, 'fx', 8500, 10, '{30,60,180,300}', true, 30),
+  ('GBPUSD', 'GBP/USD', 'fx', 'exchange', 'GBP/USD', 6, 'fx', 8500, 10, '{30,60,180,300}', false, 40);

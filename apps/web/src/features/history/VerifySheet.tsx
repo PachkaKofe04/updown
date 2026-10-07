@@ -26,11 +26,13 @@ function decimalsOf(value: string): number {
   return value.split('.')[1]?.length ?? 0;
 }
 
+/** Как получена цена: середина лучших цен биржевого стакана. Название источника не показываем. */
 function sourceText(priceSource: string): string {
   const [venue, symbol, channel] = priceSource.split(':');
-  const name = venue === 'kraken' ? 'Kraken' : venue === 'simulated' ? 'Имитация (только тест)' : venue;
-  const how = channel?.startsWith('book') ? 'середина лучших цен покупки и продажи в стакане' : 'середина лучших цен';
-  return `${name}, ${symbol}: ${how}`;
+  const how = channel?.startsWith('book')
+    ? 'середина лучших цен покупки и продажи в биржевом стакане'
+    : 'середина лучших цен покупки и продажи';
+  return venue === 'simulated' ? `Имитация (только тест), ${symbol}` : `${symbol}: ${how}`;
 }
 
 /** Проверка результата: по каким данным и по какому правилу рассчитан прогноз. */

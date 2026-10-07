@@ -3,22 +3,22 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { midOf } from '../../src/common/decimal.js';
-import { KrakenBook } from '../../src/modules/market/providers/kraken-book.js';
-import { type KrakenBookData, parseKrakenMessage } from '../../src/modules/market/providers/kraken-json.js';
+import { OrderBook } from '../../src/modules/market/providers/order-book.js';
+import { type BookData, parseFeedMessage } from '../../src/modules/market/providers/feed-json.js';
 
-// Реальные сообщения Kraken WS v2 (канал book, 2026-10-05): снимок и обновления с CRC32 биржи.
+// Реальные сообщения биржевого фида (канал book, 2026-10-05): снимок и обновления с CRC32 биржи.
 const fixture = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'kraken-book-capture.json'), 'utf8'),
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'book-capture.json'), 'utf8'),
 ) as Record<string, { raw: string }[]>;
 
 interface Msg {
   type: string;
-  data: KrakenBookData[];
+  data: BookData[];
 }
 
-describe('KrakenBook', () => {
+describe('OrderBook', () => {
   it('сохраняет точный текст цен при разборе JSON', () => {
-    const msg = parseKrakenMessage('{"data":[{"price":1.11800,"qty":40.00000000,"checksum":123}]}') as {
+    const msg = parseFeedMessage('{"data":[{"price":1.11800,"qty":40.00000000,"checksum":123}]}') as {
       data: { price: string; qty: string; checksum: number }[];
     };
     expect(msg.data[0]).toEqual({ price: '1.11800', qty: '40.00000000', checksum: 123 });
@@ -26,10 +26,10 @@ describe('KrakenBook', () => {
 
   for (const symbol of ['BTC/USD', 'EUR/USD']) {
     it(`контрольная сумма совпадает с биржей на всех сообщениях ${symbol}`, () => {
-      const book = new KrakenBook(10);
+      const book = new OrderBook(10);
       let checked = 0;
       for (const { raw } of fixture[symbol]!) {
-        const msg = parseKrakenMessage(raw) as Msg;
+        const msg = parseFeedMessage(raw) as Msg;
         const d = msg.data[0]!;
         if (msg.type === 'snapshot') book.applySnapshot(d.bids, d.asks);
         else book.applyUpdate(d.bids, d.asks);
@@ -43,8 +43,8 @@ describe('KrakenBook', () => {
   }
 
   it('считает середину стакана точно', () => {
-    const book = new KrakenBook(10);
-    const snapshot = parseKrakenMessage(fixture['EUR/USD']![0]!.raw) as Msg;
+    const book = new OrderBook(10);
+    const snapshot = parseFeedMessage(fixture['EUR/USD']![0]!.raw) as Msg;
     book.applySnapshot(snapshot.data[0]!.bids, snapshot.data[0]!.asks);
     const bid = book.bestBid()!;
     const ask = book.bestAsk()!;
@@ -54,8 +54,8 @@ describe('KrakenBook', () => {
   });
 
   it('обнаруживает расхождение стакана', () => {
-    const book = new KrakenBook(10);
-    const [snap, upd] = fixture['BTC/USD']!.slice(0, 2).map((m) => parseKrakenMessage(m.raw) as Msg);
+    const book = new OrderBook(10);
+    const [snap, upd] = fixture['BTC/USD']!.slice(0, 2).map((m) => parseFeedMessage(m.raw) as Msg);
     book.applySnapshot(snap!.data[0]!.bids, snap!.data[0]!.asks);
     // пропускаем уровень: стакан расходится с биржей
     const d = upd!.data[0]!;
@@ -64,7 +64,7 @@ describe('KrakenBook', () => {
   });
 
   it('нулевой объём удаляет уровень, глубина ограничена', () => {
-    const book = new KrakenBook(2);
+    const book = new OrderBook(2);
     book.applySnapshot(
       [
         { price: '10.0', qty: '1.0' },

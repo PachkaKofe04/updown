@@ -18,7 +18,7 @@ import {
 import { canTradeWindow, isMarketOpen, nextMarketChange } from './schedule.js';
 import { TickStore } from './tick-store.js';
 import { TickWriter } from './tick-writer.js';
-import { isoToMs } from './time.js';
+import { isoToMs, nextTickTime } from './time.js';
 
 const BUFFER_MS = 15 * 60_000;
 
@@ -115,8 +115,7 @@ export class MarketService implements OnModuleInit, OnApplicationShutdown, Provi
       const anchor = this.needsAnchor.has(asset.id);
       if (!anchor && last?.mid === mid) continue;
       this.needsAnchor.delete(asset.id);
-      // время получения строго возрастает внутри актива (микросекундный шаг при совпадении)
-      const t = Math.max(this.clock.now(), (last?.t ?? 0) + 0.001);
+      const t = nextTickTime(this.clock.now(), last?.t ?? null);
       const tick: Tick = { t, mid, bid: quote.bid, ask: quote.ask, sourceTs: quote.sourceTs, sourceRef: quote.sourceRef };
       this.store.append(asset.id, tick);
       this.writer.enqueue(asset.id, tick);

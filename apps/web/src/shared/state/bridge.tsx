@@ -1,19 +1,19 @@
 'use client';
 
-import type { WsServerMessage } from '@updown/contracts';
+import type { WsHello, WsServerMessage } from '@updown/contracts';
 import { useEffect } from 'react';
+import { track } from '../lib/analytics';
 import { api } from '../lib/api';
 import { realtime } from '../lib/realtime';
 import { serverNow } from '../lib/server-clock';
-import { ingestTick, useMarket } from './market';
+import { FEED_PULSE_TIMEOUT_MS, ingestTick, useMarket } from './market';
 import { useSession } from './session';
 import { hydrateTradePrefs, useTrade } from './trade';
 
 function handle(msg: WsServerMessage): void {
   switch (msg.type) {
     case 'hello':
-      useSession.getState().setMe(msg.me);
-      useTrade.getState().setOpen(msg.open);
+      onHello(msg);
       return;
     case 'tick':
       if (ingestTick(msg.a, msg.t, msg.p)) useMarket.getState().setPrice(msg.a, msg.p);
@@ -21,7 +21,9 @@ function handle(msg: WsServerMessage): void {
     case 'history': {
       let last: string | null = null;
       for (const [t, p] of msg.ticks) if (ingestTick(msg.a, t, p)) last = p;
-      if (last) useMarket.getState().setPrice(msg.a, last);
+      const market = useMarket.getState();
+      if (last) market.setPrice(msg.a, last);
+      market.markSynced(msg.a);
       return;
     }
     case 'feed':
@@ -30,7 +32,7 @@ function handle(msg: WsServerMessage): void {
     case 'evt': {
       useTrade.getState().upsert(msg.prediction, serverNow());
       const session = useSession.getState();
-      session.setBalance(msg.balance);
+      session.setWallet(msg.balance, msg.walletVersion);
       if (msg.stats) session.setStats(msg.stats);
       return;
     }
@@ -39,7 +41,34 @@ function handle(msg: WsServerMessage): void {
   }
 }
 
-async function refreshAssets(): Promise<void> {
+/**
+ * Сверка после (пере)подключения. Прогнозы, которые были открыты до обрыва, но в снимке сервера
+ * уже не открыты, рассчитались без нас: их итог догружается и показывается один раз.
+ */
+function onHello(msg: WsHello): void {
+  const previousUser = useSession.getState().me?.user.id;
+  useSession.getState().setMe(msg.me);
+  useMarket.getState().markHello();
+  const trade = useTrade.getState();
+  const sameUser = msg.me !== null && msg.me.user.id === previousUser;
+  const missing = sameUser ? Object.keys(trade.open).filter((id) => !msg.open.some((p) => p.id === id)) : [];
+  trade.setOpen(msg.open.filter((p) => !trade.settled.some((s) => s.id === p.id)));
+  if (missing.length === 0) return;
+  void Promise.all(
+    missing.map((id) =>
+      api
+        .prediction(id)
+        .then((p) => useTrade.getState().upsert(p, serverNow()))
+        .catch(() => {}),
+    ),
+  ).then(() => api.me().then((me) => useSession.getState().setMe(me)).catch(() => {}));
+}
+
+let assetsRetry: ReturnType<typeof setTimeout> | null = null;
+
+export async function refreshAssets(): Promise<void> {
+  if (assetsRetry) clearTimeout(assetsRetry);
+  assetsRetry = null;
   try {
     const assets = await api.assets();
     useMarket.getState().setAssets(assets);
@@ -50,7 +79,12 @@ async function refreshAssets(): Promise<void> {
     // у валют нет 30 секунд: переключаемся на минуту
     if (asset && !asset.durations.includes(trade.duration)) trade.setDuration(asset.durations[0] ?? 60);
   } catch {
-    // список активов обновится при следующей попытке
+    const market = useMarket.getState();
+    if (!market.assetsLoaded) {
+      // без списка активов играть нельзя: показываем ошибку и пробуем снова чаще обычного
+      market.setAssetsError(true);
+      assetsRetry = setTimeout(() => void refreshAssets(), 5000);
+    }
   }
 }
 
@@ -58,6 +92,7 @@ async function refreshAssets(): Promise<void> {
 export function RealtimeBridge() {
   useEffect(() => {
     hydrateTradePrefs();
+    track('app_open');
     const offMessage = realtime.onMessage(handle);
     const offState = realtime.onState((s) => useMarket.getState().setConnection(s));
     realtime.start();
@@ -82,6 +117,18 @@ export function RealtimeBridge() {
     const offAssets = useMarket.subscribe((s, prev) => {
       if (s.assets !== prev.assets) syncSubs();
     });
+
+    // Пульс feed приходит раз в секунду по каждому подписанному активу. Нет пульса - цена на экране
+    // могла замереть (например, сокет завис без закрытия): прогнозы по ней не открываем.
+    const pulseTimer = setInterval(() => {
+      const market = useMarket.getState();
+      const now = Date.now();
+      for (const assetId of Object.keys(market.synced)) {
+        if (market.feeds[assetId] === 'live' && now - (market.feedAt[assetId] ?? 0) > FEED_PULSE_TIMEOUT_MS) {
+          market.markFeedStale(assetId);
+        }
+      }
+    }, 1000);
 
     // Страховка: если событие о расчёте потерялось, спрашиваем результат сами.
     const asked = new Set<string>();
@@ -108,6 +155,7 @@ export function RealtimeBridge() {
       offTrade();
       offAssets();
       clearInterval(assetsTimer);
+      clearInterval(pulseTimer);
       clearInterval(settleTimer);
     };
   }, []);

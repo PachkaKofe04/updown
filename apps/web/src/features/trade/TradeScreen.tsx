@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { Onboarding } from '@/features/onboarding/Onboarding';
+import { refreshAssets } from '@/shared/state/bridge';
 import { useMarket } from '@/shared/state/market';
 import { useSession } from '@/shared/state/session';
 import { useTrade } from '@/shared/state/trade';
@@ -20,6 +21,7 @@ export function TradeScreen() {
   const status = useSession((s) => s.status);
   const assetId = useTrade((s) => s.assetId);
   const asset = useMarket((s) => s.assets.find((a) => a.id === assetId));
+  const assetsError = useMarket((s) => s.assetsError);
   const [picker, setPicker] = useState(false);
   const dockRef = useRef<HTMLDivElement>(null);
 
@@ -51,6 +53,8 @@ export function TradeScreen() {
               <ActionButtons asset={asset} />
             </section>
           </div>
+        ) : assetsError ? (
+          <LoadError />
         ) : (
           <SkeletonTrade />
         )}
@@ -58,6 +62,30 @@ export function TradeScreen() {
       <BottomNav />
       {status === 'anonymous' && <Onboarding />}
       <AssetSheet open={picker} onClose={() => setPicker(false)} />
+    </div>
+  );
+}
+
+/** Сервер недоступен при открытии: понятная причина и повтор вместо вечной загрузки. */
+function LoadError() {
+  const [retrying, setRetrying] = useState(false);
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center" role="alert">
+      <p className="text-emph font-semibold">Не удалось загрузить рынок</p>
+      <p className="max-w-[300px] text-label text-text-2">
+        Сервер сейчас недоступен. Проверьте интернет; мы пробуем подключиться снова каждые несколько секунд.
+      </p>
+      <button
+        type="button"
+        disabled={retrying}
+        onClick={() => {
+          setRetrying(true);
+          void refreshAssets().finally(() => setRetrying(false));
+        }}
+        className="primary-button compact"
+      >
+        {retrying ? 'Подключаемся...' : 'Повторить'}
+      </button>
     </div>
   );
 }

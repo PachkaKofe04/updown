@@ -19,12 +19,16 @@ export interface Posting {
 export interface PostingResult {
   entryId: number;
   balanceAfter: number;
+  /** Номер проводки внутри кошелька - версия баланса после неё. */
+  walletSeq: number;
 }
 
 export interface WalletRow {
   id: string;
   balance: number;
   peakBalance: number;
+  /** Номер последней проводки кошелька (ledger_seq): растёт с каждым изменением баланса. */
+  version: number;
 }
 
 /**
@@ -43,7 +47,7 @@ export class WalletService {
 
   async getMainWallet(userId: string, tx?: Tx, lock = false): Promise<WalletRow> {
     const q = (tx ?? this.db)
-      .select({ id: wallets.id, balance: wallets.balance, peakBalance: wallets.peakBalance })
+      .select({ id: wallets.id, balance: wallets.balance, peakBalance: wallets.peakBalance, version: wallets.ledgerSeq })
       .from(wallets)
       .where(and(eq(wallets.userId, userId), eq(wallets.kind, 'main'), isNull(wallets.contextId)));
     const [row] = lock ? await q.for('update') : await q;
@@ -69,9 +73,9 @@ export class WalletService {
           refId: p.refId ?? null,
           meta: p.meta ?? {},
         })
-        .returning({ id: ledgerEntries.id, balanceAfter: ledgerEntries.balanceAfter });
+        .returning({ id: ledgerEntries.id, balanceAfter: ledgerEntries.balanceAfter, walletSeq: ledgerEntries.walletSeq });
       const row = rows[0];
-      return row ? { entryId: row.id, balanceAfter: row.balanceAfter } : null;
+      return row ? { entryId: row.id, balanceAfter: row.balanceAfter, walletSeq: row.walletSeq } : null;
     } catch (error) {
       if (isConstraintViolation(error, 'wallets_balance_non_negative')) {
         throw new DomainError('insufficient_funds');

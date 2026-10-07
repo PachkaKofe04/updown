@@ -9,6 +9,8 @@ import {
 } from '@updown/contracts';
 import { motion } from 'motion/react';
 import { useEffect, useState } from 'react';
+import { useAccountSheet } from '@/features/account/account';
+import { track } from '@/shared/lib/analytics';
 import { api, ApiRequestError } from '@/shared/lib/api';
 import { realtime } from '@/shared/lib/realtime';
 import { useSession } from '@/shared/state/session';
@@ -29,6 +31,7 @@ interface ServerCheck {
  */
 export function Onboarding() {
   const setMe = useSession((s) => s.setMe);
+  const showAccount = useAccountSheet((s) => s.show);
   const [nickname, setNickname] = useState('');
   const [server, setServer] = useState<ServerCheck | null>(null);
   const [busy, setBusy] = useState(false);
@@ -50,6 +53,7 @@ export function Onboarding() {
   };
 
   useEffect(suggest, []);
+  useEffect(() => track('onboarding_view'), []);
 
   // Форма проверяется сразу при рендере, занятость и запреты - на сервере с паузой после ввода.
   const value = nickname.trim();
@@ -181,7 +185,14 @@ export function Onboarding() {
               <Icon name="chevronRight" size={18} />
             </button>
           </form>
-          <p className="mt-3 text-center text-caption text-text-3">
+          <button
+            type="button"
+            onClick={() => showAccount('login')}
+            className="mt-2 h-11 w-full text-label font-medium text-text-2"
+          >
+            Уже играли? <span className="text-accent-text">Войти по почте</span>
+          </button>
+          <p className="mt-1 text-center text-caption text-text-3">
             Coins - игровая валюта. Их нельзя вывести или обменять на деньги.
           </p>
         </div>

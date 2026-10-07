@@ -5,7 +5,8 @@ import { formatPrice } from '@/shared/lib/format';
 import { serverNow } from '@/shared/lib/server-clock';
 import { ticksOf, useMarket } from '@/shared/state/market';
 
-const SOURCE_NAME: Record<string, string> = { kraken: 'Kraken', simulated: 'SIMULATED', manual: 'TEST' };
+// Название источника котировок не показываем; помечаем только ненастоящие цены (разработка и тесты).
+const TEST_SOURCE: Record<string, string> = { simulated: 'Имитация', manual: 'Тест' };
 
 export function PriceHeader({ asset }: { asset: AssetDto }) {
   const price = useMarket((s) => s.prices[asset.id]);
@@ -48,7 +49,9 @@ export function PriceHeader({ asset }: { asset: AssetDto }) {
         )}
         <span className="source-status">
           <span className={`size-1.5 rounded-full ${status.dot}`} />
-          {SOURCE_NAME[asset.source] ?? asset.source} · {status.text}
+          {TEST_SOURCE[asset.source]
+            ? `${TEST_SOURCE[asset.source]} · ${status.text}`
+            : status.text.charAt(0).toUpperCase() + status.text.slice(1)}
         </span>
         </div>
       </div>

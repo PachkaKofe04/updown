@@ -1,10 +1,22 @@
 import { Body, Controller, Get, HttpCode, Inject, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
-import type { MeDto, NicknameCheckResponse, NicknameSuggestResponse } from '@updown/contracts';
+import {
+  type EmailStartBody,
+  EmailStartBodySchema,
+  type EmailStartResponse,
+  type EmailVerifyBody,
+  EmailVerifyBodySchema,
+  type EmailVerifyResponse,
+  type MeDto,
+  type NicknameCheckResponse,
+  type NicknameSuggestResponse,
+} from '@updown/contracts';
 import type { CookieOptions, Request, Response } from 'express';
 import { Clock } from '../../common/clock.js';
 import { DomainError } from '../../common/errors.js';
 import { RateLimiter } from '../../common/rate-limit.js';
+import { ZodPipe } from '../../common/zod.pipe.js';
 import { ENV, type Env } from '../../config/env.js';
+import { EmailAuthService } from './email-auth.service.js';
 import type { AuthContext } from './identity.service.js';
 import { DEVICE_COOKIE, IdentityService, SESSION_COOKIE } from './identity.service.js';
 import { Auth, requestIp, SessionGuard } from './session.guard.js';
@@ -16,6 +28,7 @@ export class AuthController {
 
   constructor(
     private readonly identity: IdentityService,
+    private readonly emailAuth: EmailAuthService,
     private readonly clock: Clock,
     @Inject(ENV) private readonly env: Env,
   ) {}
@@ -63,6 +76,31 @@ export class AuthController {
   @UseGuards(SessionGuard)
   me(@Auth() auth: AuthContext): Promise<MeDto> {
     return this.identity.getMe(auth.userId);
+  }
+
+  /** Код на почту. Ответ одинаковый для любого адреса: по нему нельзя узнать, есть ли такой аккаунт. */
+  @Post('auth/email/start')
+  @HttpCode(200)
+  start(@Body(new ZodPipe(EmailStartBodySchema)) body: EmailStartBody, @Req() req: Request): Promise<EmailStartResponse> {
+    return this.emailAuth.start(body.email, requestIp(req));
+  }
+
+  @Post('auth/email/verify')
+  @HttpCode(200)
+  async verify(
+    @Body(new ZodPipe(EmailVerifyBodySchema)) body: EmailVerifyBody,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<EmailVerifyResponse> {
+    const cookies = req.cookies as Record<string, string> | undefined;
+    const current = await this.identity.resolveSession(cookies?.[SESSION_COOKIE]);
+    const result = await this.emailAuth.verify(body, current, {
+      ip: requestIp(req),
+      userAgent: req.get('user-agent') ?? null,
+      deviceId: cookies?.[DEVICE_COOKIE] ?? null,
+    });
+    if (result.token) res.cookie(SESSION_COOKIE, result.token, this.cookieOptions(this.identity.sessionTtlMs()));
+    return { me: await this.identity.getMe(result.userId), switched: result.switched };
   }
 
   @Post('auth/logout')

@@ -31,6 +31,15 @@ export function formatPriceNumber(value: number, scale: number): string {
 export const DURATION_LABEL: Record<DurationSec, string> = { 30: '30с', 60: '1м', 180: '3м', 300: '5м' };
 export const DURATION_LONG: Record<DurationSec, string> = { 30: '30 секунд', 60: '1 минута', 180: '3 минуты', 300: '5 минут' };
 
+/** Сколько ждать: "3 ч 12 мин", "45 мин", "меньше минуты". */
+export function formatWait(ms: number): string {
+  const minutes = Math.ceil(ms / 60_000);
+  if (minutes <= 0) return 'меньше минуты';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? `${h} ч${m > 0 ? ` ${m} мин` : ''}` : `${m} мин`;
+}
+
 /** Обратный отсчёт "0:23". */
 export function formatCountdown(ms: number): string {
   const s = Math.max(0, Math.ceil(ms / 1000));

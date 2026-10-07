@@ -26,7 +26,18 @@ export const PG = {
   checkViolation: '23514',
   uniqueViolation: '23505',
   insufficientPrivilege: '42501',
+  lockNotAvailable: '55P03',
 } as const;
+
+/** Транзакция не дождалась блокировки за lock_timeout. */
+export function isLockTimeout(error: unknown): boolean {
+  return pgErrorOf(error)?.code === PG.lockNotAvailable;
+}
+
+/** Форма UUID, которую примет PostgreSQL: проверять до запроса, иначе ошибка БД станет ответом 500. */
+export function isUuidShape(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
 
 export function isConstraintViolation(error: unknown, constraint: string): boolean {
   const info = pgErrorOf(error);

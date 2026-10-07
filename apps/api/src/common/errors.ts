@@ -11,7 +11,7 @@ import type { Response } from 'express';
 
 // Тексты ошибок для человека: спокойно и понятно, без технических кодов.
 const MESSAGES: Record<ErrorCode, string> = {
-  validation_failed: 'Проверьте параметры прогноза.',
+  validation_failed: 'Проверьте введённые данные.',
   unauthorized: 'Сессия не найдена. Нажмите "Играть", чтобы начать.',
   not_found: 'Не найдено.',
   insufficient_funds: 'Недостаточно Coins для этого прогноза.',
@@ -25,6 +25,12 @@ const MESSAGES: Record<ErrorCode, string> = {
   idempotency_conflict: 'Этот запрос уже был отправлен с другими параметрами.',
   nickname_invalid: 'Выберите другой ник.',
   nickname_taken: 'Этот ник уже занят.',
+  code_invalid: 'Код не подошёл или устарел. Проверьте цифры или запросите новый.',
+  code_attempts_exceeded: 'Слишком много попыток. Запросите новый код.',
+  email_in_use: 'Эта почта уже привязана к другому аккаунту.',
+  account_not_found: 'Аккаунт с этой почтой не найден.',
+  already_registered: 'Прогресс уже сохранён на почту.',
+  comeback_unavailable: 'Бонус сейчас недоступен.',
   maintenance: 'Короткое обслуживание. Новые прогнозы откроются через минуту.',
   internal: 'Что-то пошло не так. Попробуйте ещё раз.',
 };
@@ -44,6 +50,12 @@ const STATUS: Record<ErrorCode, number> = {
   idempotency_conflict: HttpStatus.CONFLICT,
   nickname_invalid: HttpStatus.UNPROCESSABLE_ENTITY,
   nickname_taken: HttpStatus.CONFLICT,
+  code_invalid: HttpStatus.UNPROCESSABLE_ENTITY,
+  code_attempts_exceeded: HttpStatus.TOO_MANY_REQUESTS,
+  email_in_use: HttpStatus.CONFLICT,
+  account_not_found: HttpStatus.NOT_FOUND,
+  already_registered: HttpStatus.CONFLICT,
+  comeback_unavailable: HttpStatus.CONFLICT,
   maintenance: HttpStatus.SERVICE_UNAVAILABLE,
   internal: HttpStatus.INTERNAL_SERVER_ERROR,
 };

@@ -26,6 +26,8 @@ interface TradeState {
   /** Недавно рассчитанные прогнозы этой сессии: маркеры на графике. */
   settled: PredictionDto[];
   banner: ResultBannerState | null;
+  /** Счётчик изменений прогнозов игрока: история обновляется по нему, а не по длине списков. */
+  revision: number;
   setAsset(assetId: string): void;
   setDuration(duration: DurationSec): void;
   setStake(stake: number): void;
@@ -35,6 +37,8 @@ interface TradeState {
   fail(tempId: string): void;
   upsert(prediction: PredictionDto, now: number): void;
   dismissBanner(): void;
+  /** Вход в другой аккаунт: прогнозы прошлого игрока на экране не остаются. */
+  resetPlayer(): void;
 }
 
 const STORAGE_KEY = 'updown.trade.v1';
@@ -64,6 +68,7 @@ export const useTrade = create<TradeState>()((set, get) => ({
   pending: [],
   settled: [],
   banner: null,
+  revision: 0,
   setAsset: (assetId) => {
     set({ assetId });
     persist(get());
@@ -76,27 +81,37 @@ export const useTrade = create<TradeState>()((set, get) => ({
     set({ stake });
     persist(get());
   },
-  setOpen: (list) => set({ open: Object.fromEntries(list.map((p) => [p.id, p])) }),
+  setOpen: (list) =>
+    set((s) => ({ open: Object.fromEntries(list.map((p) => [p.id, p])), revision: s.revision + 1 })),
   addPending: (p) => set((s) => ({ pending: [...s.pending, p] })),
   confirm: (tempId, prediction) =>
     set((s) => ({
       pending: s.pending.filter((p) => p.tempId !== tempId),
-      open: prediction.status === 'open' ? { ...s.open, [prediction.id]: prediction } : s.open,
+      // итог мог прийти по сокету раньше ответа на создание: рассчитанный прогноз не воскрешаем
+      open:
+        prediction.status === 'open' && !s.settled.some((p) => p.id === prediction.id)
+          ? { ...s.open, [prediction.id]: prediction }
+          : s.open,
+      revision: s.revision + 1,
     })),
   fail: (tempId) => set((s) => ({ pending: s.pending.filter((p) => p.tempId !== tempId) })),
   upsert: (prediction, now) =>
     set((s) => {
-      if (prediction.status === 'open') return { open: { ...s.open, [prediction.id]: prediction } };
-      const wasKnown = s.settled.some((p) => p.id === prediction.id);
+      const wasSettled = s.settled.some((p) => p.id === prediction.id);
+      if (prediction.status === 'open') {
+        return wasSettled ? s : { open: { ...s.open, [prediction.id]: prediction }, revision: s.revision + 1 };
+      }
       const open = { ...s.open };
       delete open[prediction.id];
       return {
         open,
-        settled: wasKnown ? s.settled : [prediction, ...s.settled].slice(0, 30),
-        banner: wasKnown ? s.banner : { prediction, shownAt: now },
+        settled: wasSettled ? s.settled : [prediction, ...s.settled].slice(0, 30),
+        banner: wasSettled ? s.banner : { prediction, shownAt: now },
+        revision: s.revision + 1,
       };
     }),
   dismissBanner: () => set({ banner: null }),
+  resetPlayer: () => set((s) => ({ open: {}, pending: [], settled: [], banner: null, revision: s.revision + 1 })),
 }));
 
 /** Восстановить сохранённые настройки после монтирования (на сервере localStorage нет). */

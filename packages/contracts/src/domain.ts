@@ -44,6 +44,12 @@ export const ERROR_CODES = [
   'idempotency_conflict',
   'nickname_invalid',
   'nickname_taken',
+  'code_invalid',
+  'code_attempts_exceeded',
+  'email_in_use',
+  'account_not_found',
+  'already_registered',
+  'comeback_unavailable',
   'maintenance',
   'internal',
 ] as const;

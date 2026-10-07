@@ -2,13 +2,24 @@
 
 /** 1791175565775.511 -> '2026-10-05T04:46:05.775511Z' */
 export function msToIsoMicros(ms: number): string {
-  let whole = Math.floor(ms);
-  let micros = Math.round((ms - whole) * 1000);
-  if (micros === 1000) {
-    whole += 1;
-    micros = 0;
-  }
+  // через целые микросекунды: соседние значения не схлопываются при округлении дробной части
+  const us = Math.round(ms * 1000);
+  const whole = Math.floor(us / 1000);
+  const micros = us - whole * 1000;
   return new Date(whole).toISOString().replace('Z', `${String(micros).padStart(3, '0')}Z`);
+}
+
+/**
+ * Время следующего тика актива: целое число микросекунд, строго больше предыдущего.
+ * Пачка котировок в одну миллисекунду получает шаг ровно в 1 мкс, поэтому время тика
+ * остаётся уникальным ключом и в памяти, и в журнале БД (timestamptz(6)).
+ * Прибавлять 0.001 к числу мс нельзя: на текущей эпохе это неточный шаг, и после округления
+ * до микросекунд разные тики совпадали.
+ */
+export function nextTickTime(nowMs: number, lastMs: number | null): number {
+  const nowUs = Math.round(nowMs * 1000);
+  const us = lastMs === null ? nowUs : Math.max(nowUs, Math.round(lastMs * 1000) + 1);
+  return us / 1000;
 }
 
 const TS_RE = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}(?::?\d{2})?)?$/;

@@ -6,9 +6,11 @@ import { Clock } from '../../common/clock.js';
 import { DomainError } from '../../common/errors.js';
 import { isConstraintViolation } from '../../common/pg-errors.js';
 import { RateLimiter } from '../../common/rate-limit.js';
+import { UserEvents } from '../../common/user-events.js';
 import { ENV, type Env } from '../../config/env.js';
-import { DB, type Db } from '../../db/db.js';
-import { sessions, users } from '../../db/schema.js';
+import { DB, type Db, type Tx } from '../../db/db.js';
+import { authIdentities, sessions, users } from '../../db/schema.js';
+import { AnalyticsService } from '../analytics/analytics.service.js';
 import { StatsService } from '../stats/stats.service.js';
 import { WalletService } from '../wallet/wallet.service.js';
 import { generateNickname, nicknameProblem } from './nickname.js';
@@ -40,6 +42,8 @@ export class IdentityService {
     private readonly clock: Clock,
     private readonly wallets: WalletService,
     private readonly stats: StatsService,
+    private readonly events: UserEvents,
+    private readonly analytics: AnalyticsService,
   ) {
     this.guestLimiter = new RateLimiter(env.GUESTS_PER_IP_PER_10_MIN, 10 * 60 * 1000);
   }
@@ -82,16 +86,10 @@ export class IdentityService {
             type: 'WELCOME_BONUS',
             idempotencyKey: `welcome:${user.id}`,
           });
-          await tx.insert(sessions).values({
-            id: hashToken(token),
-            userId: user.id,
-            deviceId,
-            ip: meta.ip,
-            userAgent: meta.userAgent?.slice(0, 400) ?? null,
-            expiresAt: new Date(now + SESSION_TTL_MS),
-          });
+          await this.insertSession(tx, token, user.id, { ...meta, deviceId }, now);
           return user.id;
         });
+        this.analytics.track('guest_created', userId, { custom_nickname: chosenNickname !== undefined }, deviceId);
         return { token, deviceId, userId };
       } catch (error) {
         const nicknameTaken = isConstraintViolation(error, 'users_nickname_lower_uq');
@@ -160,24 +158,45 @@ export class IdentityService {
     return { userId: row.userId, sessionId: id };
   }
 
+  /** Новая сессия игрока (вход в аккаунт на этом устройстве). Возвращает токен для cookie. */
+  async createSession(tx: Tx, userId: string, meta: RequestMeta): Promise<string> {
+    const token = newSessionToken();
+    await this.insertSession(tx, token, userId, meta, this.clock.now());
+    return token;
+  }
+
+  private async insertSession(tx: Tx, token: string, userId: string, meta: RequestMeta, now: number): Promise<void> {
+    await tx.insert(sessions).values({
+      id: hashToken(token),
+      userId,
+      deviceId: isUuid(meta.deviceId) ? meta.deviceId : null,
+      ip: meta.ip,
+      userAgent: meta.userAgent?.slice(0, 400) ?? null,
+      expiresAt: new Date(now + SESSION_TTL_MS),
+    });
+  }
+
   async revokeSession(sessionId: string): Promise<void> {
     await this.db
       .update(sessions)
       .set({ revokedAt: sql`now()` })
       .where(eq(sessions.id, sessionId));
+    // персональные сокеты этой сессии закрываются: события игрока больше не доставляются
+    this.events.emitSessionRevoked(sessionId);
   }
 
   async getMe(userId: string): Promise<MeDto> {
     const [user] = await this.db
-      .select({ id: users.id, kind: users.kind, nickname: users.nickname })
+      .select({ id: users.id, kind: users.kind, nickname: users.nickname, email: authIdentities.subject })
       .from(users)
+      .leftJoin(authIdentities, and(eq(authIdentities.userId, users.id), eq(authIdentities.provider, 'email')))
       .where(eq(users.id, userId));
     if (!user) throw new DomainError('unauthorized');
     const wallet = await this.wallets.getMainWallet(userId);
     const stats = await this.stats.get(userId);
     return {
-      user,
-      wallet: { balance: wallet.balance, peakBalance: wallet.peakBalance },
+      user: { ...user, email: user.email ? maskEmail(user.email) : null },
+      wallet: { balance: wallet.balance, peakBalance: wallet.peakBalance, version: wallet.version },
       stats,
     };
   }
@@ -185,4 +204,11 @@ export class IdentityService {
   sessionTtlMs(): number {
     return SESSION_TTL_MS;
   }
+}
+
+/** "artem@mail.ru" -> "a***@mail.ru": игрок узнаёт свой адрес, посторонний на экране - нет. */
+export function maskEmail(email: string): string {
+  const at = email.lastIndexOf('@');
+  if (at <= 0) return '***';
+  return `${email[0]}***${email.slice(at)}`;
 }

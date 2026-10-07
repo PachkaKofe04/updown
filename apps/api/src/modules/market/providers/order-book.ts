@@ -1,6 +1,6 @@
 import { crc32 } from 'node:zlib';
 import { toScaled } from '../../../common/decimal.js';
-import type { KrakenLevel } from './kraken-json.js';
+import type { BookLevel } from './feed-json.js';
 
 interface Level {
   price: string;
@@ -12,24 +12,24 @@ const KEY_SCALE = 12;
 const ZERO_QTY = /^0+(\.0+)?$/;
 
 /**
- * Локальная копия стакана Kraken WS v2 (канал book) глубины depth.
+ * Локальная копия стакана биржи (канал book) глубины depth.
  * После каждого сообщения стакан усекается до depth и сверяется с CRC32 биржи:
  * 10 лучших ask по возрастанию, затем 10 лучших bid по убыванию; у цены и объёма
  * убираются точка и ведущие нули.
  */
-export class KrakenBook {
+export class OrderBook {
   private bids = new Map<string, Level>();
   private asks = new Map<string, Level>();
 
   constructor(private readonly depth = 10) {}
 
-  applySnapshot(bids: KrakenLevel[], asks: KrakenLevel[]): void {
+  applySnapshot(bids: BookLevel[], asks: BookLevel[]): void {
     this.bids.clear();
     this.asks.clear();
     this.applyUpdate(bids, asks);
   }
 
-  applyUpdate(bids: KrakenLevel[], asks: KrakenLevel[]): void {
+  applyUpdate(bids: BookLevel[], asks: BookLevel[]): void {
     for (const l of bids) this.upsert(this.bids, l);
     for (const l of asks) this.upsert(this.asks, l);
     this.bids = truncate(this.bids, this.depth, 'desc');
@@ -50,7 +50,7 @@ export class KrakenBook {
     return crc32(text) >>> 0;
   }
 
-  private upsert(side: Map<string, Level>, l: KrakenLevel): void {
+  private upsert(side: Map<string, Level>, l: BookLevel): void {
     if (ZERO_QTY.test(l.qty)) {
       side.delete(l.price);
       return;

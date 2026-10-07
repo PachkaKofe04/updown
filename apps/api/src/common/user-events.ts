@@ -7,6 +7,7 @@ export interface PredictionEvent {
   kind: 'prediction.opened' | 'prediction.settled';
   prediction: PredictionDto;
   balance: number;
+  walletVersion: number;
   stats: StatsDto | null;
 }
 
@@ -26,5 +27,15 @@ export class UserEvents {
   onPrediction(listener: (event: PredictionEvent) => void): () => void {
     this.emitter.on('prediction', listener);
     return () => this.emitter.off('prediction', listener);
+  }
+
+  /** Сессия отозвана (выход, смена аккаунта): открытые по ней сокеты закрываются. */
+  emitSessionRevoked(sessionId: string): void {
+    this.emitter.emit('session.revoked', sessionId);
+  }
+
+  onSessionRevoked(listener: (sessionId: string) => void): () => void {
+    this.emitter.on('session.revoked', listener);
+    return () => this.emitter.off('session.revoked', listener);
   }
 }

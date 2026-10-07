@@ -2,14 +2,13 @@ import { Logger } from '@nestjs/common';
 import WebSocket from 'ws';
 import { rawDataToString } from '../../../common/ws-data.js';
 import type { MarketDataProvider, ProviderSink } from '../market.types.js';
-import { KrakenBook } from './kraken-book.js';
-import { type KrakenBookData, parseKrakenMessage } from './kraken-json.js';
+import { type BookData, parseBookData, parseFeedMessage } from './feed-json.js';
+import { OrderBook } from './order-book.js';
 
-const URL = 'wss://ws.kraken.com/v2';
 const DEPTH = 10;
 const SILENCE_RECONNECT_MS = 10_000;
 
-interface KrakenMessage {
+interface FeedMessage {
   channel?: string;
   type?: string;
   method?: string;
@@ -19,17 +18,17 @@ interface KrakenMessage {
 }
 
 /**
- * Kraken WebSocket v2, канал book глубины 10. Цена = середина лучших bid/ask.
+ * Биржевой WebSocket-фид, канал book глубины 10. Цена = середина лучших bid/ask.
  * Живость: heartbeat раз в секунду, канал status (техобслуживание биржи), CRC32 стакана.
- * Разрешено для разработки и внутренних тестов; публичное использование требует разрешения Kraken.
+ * Адрес фида задаётся настройкой MARKET_WS_URL.
  */
-export class KrakenProvider implements MarketDataProvider {
-  readonly id = 'kraken';
-  private readonly log = new Logger('Kraken');
+export class ExchangeProvider implements MarketDataProvider {
+  readonly id = 'exchange';
+  private readonly log = new Logger('MarketFeed');
   private ws: WebSocket | null = null;
   private sink: ProviderSink | null = null;
   private symbols: string[] = [];
-  private readonly books = new Map<string, KrakenBook>();
+  private readonly books = new Map<string, OrderBook>();
   private readonly synced = new Set<string>();
   private readonly lastTop = new Map<string, string>();
   private systemOnline = false;
@@ -39,10 +38,10 @@ export class KrakenProvider implements MarketDataProvider {
   private silenceTimer: NodeJS.Timeout | null = null;
   private lastMessageAt = 0;
 
-  constructor(private readonly url = URL) {}
+  constructor(private readonly url: string) {}
 
   describe(symbol: string): string {
-    return `kraken:${symbol}:book${DEPTH}:mid`;
+    return `exchange:${symbol}:book${DEPTH}:mid`;
   }
 
   start(symbols: string[], sink: ProviderSink): void {
@@ -110,9 +109,9 @@ export class KrakenProvider implements MarketDataProvider {
   private onMessage(text: string): void {
     this.lastMessageAt = Date.now();
     this.sink?.onAlive();
-    let msg: KrakenMessage;
+    let msg: FeedMessage;
     try {
-      msg = parseKrakenMessage(text) as KrakenMessage;
+      msg = parseFeedMessage(text) as FeedMessage;
     } catch {
       return;
     }
@@ -123,7 +122,7 @@ export class KrakenProvider implements MarketDataProvider {
       return;
     }
     if (msg.channel === 'book' && Array.isArray(msg.data)) {
-      for (const d of msg.data as KrakenBookData[]) this.onBook(msg.type === 'snapshot', d);
+      for (const raw of msg.data) this.onBookSafe(msg.type === 'snapshot', raw);
       return;
     }
     if (msg.method && msg.success === false) this.log.warn(`${msg.method} failed: ${msg.error ?? 'unknown'}`);
@@ -136,11 +135,34 @@ export class KrakenProvider implements MarketDataProvider {
     for (const symbol of this.synced) this.sink?.onHealth(symbol, online, reason);
   }
 
-  private onBook(snapshot: boolean, d: KrakenBookData): void {
+  /**
+   * Брак в одном пакете не должен ронять процесс (а с ним все открытые прогнозы):
+   * символ помечается неживым и запрашивается заново, остальные символы работают дальше.
+   */
+  private onBookSafe(snapshot: boolean, raw: unknown): void {
+    const symbol = (raw as { symbol?: unknown } | null)?.symbol;
+    const known = typeof symbol === 'string' && this.symbols.includes(symbol) ? symbol : null;
+    try {
+      const d = parseBookData(raw);
+      if (d) {
+        this.onBook(snapshot, d);
+        return;
+      }
+      this.log.warn(`${known ?? 'unknown symbol'}: malformed book message, resubscribing`);
+    } catch (error) {
+      this.log.error(`${known ?? 'unknown symbol'}: book processing failed: ${(error as Error).message}`);
+    }
+    if (known) {
+      this.markUnsynced(known, 'malformed book message');
+      this.resubscribe(known);
+    }
+  }
+
+  private onBook(snapshot: boolean, d: BookData): void {
     if (!this.symbols.includes(d.symbol)) return;
     let book = this.books.get(d.symbol);
     if (!book) {
-      book = new KrakenBook(DEPTH);
+      book = new OrderBook(DEPTH);
       this.books.set(d.symbol, book);
     }
     if (snapshot) {

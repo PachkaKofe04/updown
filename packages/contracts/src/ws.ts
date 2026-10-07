@@ -45,6 +45,7 @@ export const WsPredictionEventSchema = z.object({
   e: z.enum(['prediction.opened', 'prediction.settled']),
   prediction: PredictionDtoSchema,
   balance: z.number().int(),
+  walletVersion: z.number().int(),
   stats: StatsDtoSchema.nullable(),
 });
 

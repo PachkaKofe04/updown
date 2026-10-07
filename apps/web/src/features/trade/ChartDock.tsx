@@ -2,10 +2,18 @@
 
 import { AnimatePresence, motion } from 'motion/react';
 import { type Ref, useEffect } from 'react';
+import type { AssetDto } from '@updown/contracts';
+import { track } from '@/shared/lib/analytics';
+import { useMarket } from '@/shared/state/market';
 import { useSession } from '@/shared/state/session';
 import { useTrade } from '@/shared/state/trade';
 import { ActiveCard } from './ActiveCard';
+import { ComebackCard } from './ComebackCard';
 import { ResultCard } from './ResultCard';
+
+function minStakeOf(assets: AssetDto[]): number {
+  return assets.length > 0 ? Math.min(...assets.map((a) => a.minStake)) : 0;
+}
 
 const ENTER = { opacity: 0, y: 12, scale: 0.97 };
 const SHOWN = { opacity: 1, y: 0, scale: 1 };
@@ -21,12 +29,18 @@ export function ChartDock({ ref }: { ref: Ref<HTMLDivElement> }) {
   const dismiss = useTrade((s) => s.dismissBanner);
   const open = useTrade((s) => s.open);
   const streak = useSession((s) => s.me?.stats.currentStreak ?? 0);
+  const pendingCount = useTrade((s) => s.pending.length);
+  // Coins не хватает даже на минимальный прогноз ни по одному активу
+  const minStake = useMarket((s) => minStakeOf(s.assets));
+  const balance = useSession((s) => s.me?.wallet.balance);
+  const broke = balance !== undefined && balance < minStake;
   const list = Object.values(open).sort((a, b) => a.expiresAt - b.expiresAt);
   const current = list[0];
 
   useEffect(() => {
     if (!banner) return;
     if (banner.prediction.status === 'won') navigator.vibrate?.([10, 40, 14]);
+    track('result_viewed', { status: banner.prediction.status });
     const timer = setTimeout(dismiss, 3000);
     return () => clearTimeout(timer);
   }, [banner, dismiss]);
@@ -59,6 +73,16 @@ export function ChartDock({ ref }: { ref: Ref<HTMLDivElement> }) {
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
           >
             <ActiveCard prediction={current} more={list.length - 1} />
+          </motion.div>
+        ) : broke && pendingCount === 0 ? (
+          <motion.div
+            key="comeback"
+            initial={ENTER}
+            animate={SHOWN}
+            exit={LEAVE}
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <ComebackCard />
           </motion.div>
         ) : null}
       </AnimatePresence>

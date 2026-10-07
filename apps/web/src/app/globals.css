@@ -183,6 +183,8 @@ button:not(:disabled), a { cursor: pointer; }
 .primary-button:hover:not(:disabled) { filter: brightness(1.07); }
 .primary-button:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 4px #0003 inset, 0 1px 0 #4a677b; }
 .primary-button:disabled { opacity: 0.4; }
+/* компактная кнопка внутри карточки: не растягивается на всю ширину */
+.primary-button.compact { width: auto; flex-shrink: 0; height: 44px; padding: 0 16px; border-radius: 12px; font-size: 13px; gap: 8px; }
 .history-shell { position: relative; height: 100dvh; min-height: 100dvh; display: flex; flex-direction: column; max-width: 1040px; margin: auto; }
 .history-main { flex: 1; min-height: 0; overflow-y: auto; padding: calc(var(--safe-top) + 24px) 20px 20px; }
 .history-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 26px; }

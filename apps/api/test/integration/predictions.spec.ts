@@ -292,6 +292,95 @@ describe('правила приёма', () => {
   });
 });
 
+describe('приём под блокировкой кошелька', () => {
+  /** Держит кошелёк игрока заблокированным в отдельной транзакции, пока тест не отпустит. */
+  async function holdWallet(userId: string): Promise<() => Promise<void>> {
+    const client = await db.pool.connect();
+    await client.query('begin');
+    await client.query(`select id from wallets where user_id = $1 and kind = 'main' for update`, [userId]);
+    return async () => {
+      await client.query('commit');
+      client.release();
+    };
+  }
+
+  /** Ждёт, пока n запросов встанут в очередь на блокировку кошелька. */
+  async function lockWaiters(n: number): Promise<void> {
+    for (let i = 0; i < 200; i++) {
+      const r = await db.pool.query<{ n: number }>(
+        `select count(*)::int as n from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`,
+      );
+      if (r.rows[0]!.n >= n) return;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error(`expected ${n} requests waiting for the wallet lock`);
+  }
+
+  it('цена и время приёма определяются после ожидания блокировки', async () => {
+    const { agent, me: m } = await guest();
+    revive();
+    ta.provider.quote('BTC/USD', '85000.0', '85000.1');
+    const release = await holdWallet(m.user.id);
+    const pending = predict(agent, { assetId: 'BTCUSD', direction: 'UP', durationSec: 30, stake: 100 }).then((r) => r);
+    await lockWaiters(1);
+    const requestedAt = ta.clock.now();
+    ta.advance(1000);
+    ta.provider.quote('BTC/USD', '85100.0', '85100.1');
+    await release();
+    const res = await pending;
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    const p = (res.body as CreatePredictionResponse).prediction;
+    expect(p.entry.price).toBe('85100.05');
+    expect(p.openedAt).toBeGreaterThanOrEqual(requestedAt + 1000);
+  });
+
+  it('фид умер, пока запрос ждал кошелёк: прогноз не принимается, Coins не списаны', async () => {
+    const { agent, me: m } = await guest();
+    revive();
+    ta.provider.quote('BTC/USD', '85000.0', '85000.1');
+    const release = await holdWallet(m.user.id);
+    const pending = predict(agent, { assetId: 'BTCUSD', direction: 'UP', durationSec: 30, stake: 100 }).then((r) => r);
+    await lockWaiters(1);
+    ta.provider.health('BTC/USD', false);
+    await release();
+    const res = await pending;
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('stale_price');
+    expect((await me(agent)).wallet.balance).toBe(10_000);
+    revive();
+    ta.provider.quote('BTC/USD', '85000.0', '85000.1');
+  });
+
+  it('параллельный повтор с другими параметрами - конфликт, одна ставка', async () => {
+    const { agent, me: m } = await guest();
+    revive();
+    ta.provider.quote('BTC/USD', '85000.0', '85000.1');
+    const clientRequestId = randomUUID();
+    const release = await holdWallet(m.user.id);
+    const send = (body: Record<string, unknown>) =>
+      agent.post('/v1/predictions').send({ clientRequestId, assetId: 'BTCUSD', durationSec: 30, ...body }).then((r) => r);
+    const a = send({ direction: 'UP', stake: 100 });
+    const b = send({ direction: 'DOWN', stake: 200 });
+    await lockWaiters(2);
+    await release();
+    const results = await Promise.all([a, b]);
+    expect(results.map((r) => r.status).sort((x, y) => x - y)).toEqual([201, 409]);
+    expect(results.find((r) => r.status === 409)?.body.code).toBe('idempotency_conflict');
+    const stakes = await db.db
+      .select()
+      .from(ledgerEntries)
+      .where(sql`${ledgerEntries.type} = 'GAME_STAKE' and ${ledgerEntries.refId} in (
+        select id from predictions where client_request_id = ${clientRequestId})`);
+    expect(stakes).toHaveLength(1);
+  });
+
+  it('неверный id прогноза - 404, а не ошибка сервера', async () => {
+    const { agent } = await guest();
+    expect((await agent.get('/v1/predictions/------------------------------------')).status).toBe(404);
+    expect((await agent.get('/v1/predictions?cursor=1791367200000_------------------------------------')).status).toBe(200);
+  });
+});
+
 describe('расчёт и история', () => {
   it('параллельный расчёт одного прогноза даёт одну выплату', async () => {
     const { agent } = await guest();

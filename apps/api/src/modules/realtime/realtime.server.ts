@@ -16,15 +16,29 @@ import { PredictionsService } from '../updown/predictions.service.js';
 
 interface Client {
   ws: WebSocket;
+  ip: string;
   userId: string | null;
+  sessionId: string | null;
   subs: Set<string>;
   alive: boolean;
   /** Последний тик, не отправленный из-за переполненного буфера сокета. */
   pending: Map<string, Tick>;
+  /** Сообщения клиента в текущем окне (ограничение частоты). */
+  window: { start: number; count: number };
 }
 
 const MAX_SUBS = 8;
+const SESSION_REVOKED = 4001;
+const POLICY_VIOLATION = 1008;
+/** Рыночные тики при таком буфере откладываются (последний тик по активу досылается позже). */
 const BACKPRESSURE_BYTES = 256 * 1024;
+/** Персональное событие нельзя молча потерять: клиент, не читающий сокет, отключается и сверяется заново. */
+const MAX_BUFFERED_BYTES = 1024 * 1024;
+const MAX_CONNECTIONS_PER_IP = 20;
+const MESSAGES_PER_WINDOW = 60;
+const MESSAGE_WINDOW_MS = 10_000;
+/** История для графика: не чаще точки на 250 мс (график рисует выборку 500 мс), последний тик всегда. */
+const HISTORY_BUCKET_MS = 250;
 
 /**
  * WebSocket /ws: публичные цены (без сессии - для лендинга) и события игрока (по cookie сессии).
@@ -35,6 +49,7 @@ export class RealtimeServer implements OnApplicationBootstrap, OnApplicationShut
   private readonly log = new Logger('Realtime');
   private readonly wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
   private readonly clients = new Set<Client>();
+  private readonly perIp = new Map<string, number>();
   private readonly byUser = new Map<string, Set<Client>>();
   private readonly byAsset = new Map<string, Set<Client>>();
   private readonly disposers: (() => void)[] = [];
@@ -62,10 +77,12 @@ export class RealtimeServer implements OnApplicationBootstrap, OnApplicationShut
           e: e.kind,
           prediction: e.prediction,
           balance: e.balance,
+          walletVersion: e.walletVersion,
           stats: e.stats,
         }),
       ),
     );
+    this.disposers.push(this.events.onSessionRevoked((sessionId) => this.closeSession(sessionId)));
     this.feedTimer = setInterval(() => this.broadcastFeed(), 1000);
     this.pingTimer = setInterval(() => this.pingAll(), 30_000);
   }
@@ -86,7 +103,35 @@ export class RealtimeServer implements OnApplicationBootstrap, OnApplicationShut
       socket.destroy();
       return;
     }
-    this.wss.handleUpgrade(req, socket, head, (ws) => void this.onConnection(ws, req));
+    const ip = this.clientIp(req);
+    if ((this.perIp.get(ip) ?? 0) >= MAX_CONNECTIONS_PER_IP) {
+      socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    // место занимается сразу, до завершения рукопожатия: параллельные подключения не обходят лимит
+    this.perIp.set(ip, (this.perIp.get(ip) ?? 0) + 1);
+    let accepted = false;
+    socket.once('close', () => {
+      if (!accepted) this.releaseIp(ip);
+    });
+    this.wss.handleUpgrade(req, socket, head, (ws) => {
+      accepted = true;
+      void this.onConnection(ws, req, ip);
+    });
+  }
+
+  private clientIp(req: IncomingMessage): string {
+    const forwarded = this.env.TRUST_PROXY ? req.headers['x-forwarded-for'] : undefined;
+    const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim();
+    const ip = first || req.socket.remoteAddress || 'unknown';
+    return ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+  }
+
+  private releaseIp(ip: string): void {
+    const left = (this.perIp.get(ip) ?? 1) - 1;
+    if (left > 0) this.perIp.set(ip, left);
+    else this.perIp.delete(ip);
   }
 
   private originAllowed(origin: string | undefined): boolean {
@@ -102,8 +147,17 @@ export class RealtimeServer implements OnApplicationBootstrap, OnApplicationShut
     }
   }
 
-  private async onConnection(ws: WebSocket, req: IncomingMessage): Promise<void> {
-    const client: Client = { ws, userId: null, subs: new Set(), alive: true, pending: new Map() };
+  private async onConnection(ws: WebSocket, req: IncomingMessage, ip: string): Promise<void> {
+    const client: Client = {
+      ws,
+      ip,
+      userId: null,
+      sessionId: null,
+      subs: new Set(),
+      alive: true,
+      pending: new Map(),
+      window: { start: Date.now(), count: 0 },
+    };
     this.clients.add(client);
     ws.on('message', (data: WebSocket.RawData) => this.onMessage(client, data));
     ws.on('pong', () => {
@@ -116,6 +170,7 @@ export class RealtimeServer implements OnApplicationBootstrap, OnApplicationShut
       const auth = await this.identity.resolveSession(parseCookies(req.headers.cookie)[SESSION_COOKIE]);
       if (auth) {
         client.userId = auth.userId;
+        client.sessionId = auth.sessionId;
         let set = this.byUser.get(auth.userId);
         if (!set) {
           set = new Set();
@@ -134,6 +189,13 @@ export class RealtimeServer implements OnApplicationBootstrap, OnApplicationShut
   }
 
   private onMessage(client: Client, data: WebSocket.RawData): void {
+    // частота по реальному времени: это защита ресурсов сервера, а не игровое время
+    const wall = Date.now();
+    if (wall - client.window.start >= MESSAGE_WINDOW_MS) client.window = { start: wall, count: 0 };
+    if (++client.window.count > MESSAGES_PER_WINDOW) {
+      client.ws.close(POLICY_VIOLATION, 'too many messages');
+      return;
+    }
     let msg: WsClientMessage;
     try {
       msg = WsClientMessageSchema.parse(JSON.parse(rawDataToString(data)));
@@ -157,7 +219,7 @@ export class RealtimeServer implements OnApplicationBootstrap, OnApplicationShut
         set.add(client);
         // Досылаем пропущенное: после переподключения график продолжается без разрыва.
         const from = Math.max(msg.since ?? now - 10 * 60_000, now - 15 * 60_000);
-        const ticks = this.market.history(msg.a, from).map((t) => [t.t, t.mid] as [number, string]);
+        const ticks = thinForChart(this.market.history(msg.a, from)).map((t) => [t.t, t.mid] as [number, string]);
         this.send(client, { type: 'history', a: msg.a, ticks });
         this.send(client, { type: 'feed', a: msg.a, state: this.market.feedState(msg.a), t: now });
         return;
@@ -209,11 +271,33 @@ export class RealtimeServer implements OnApplicationBootstrap, OnApplicationShut
     const set = this.byUser.get(userId);
     if (!set) return;
     const payload = JSON.stringify(msg);
-    for (const c of set) if (c.ws.readyState === WebSocket.OPEN) c.ws.send(payload);
+    for (const c of set) this.deliver(c, payload);
   }
 
   private send(client: Client, msg: WsServerMessage): void {
-    if (client.ws.readyState === WebSocket.OPEN) client.ws.send(JSON.stringify(msg));
+    this.deliver(client, JSON.stringify(msg));
+  }
+
+  /** Важное сообщение: если клиент не успевает читать, соединение рвётся - после переподключения он получит снимок. */
+  private deliver(client: Client, payload: string): void {
+    if (client.ws.readyState !== WebSocket.OPEN) return;
+    if (client.ws.bufferedAmount > MAX_BUFFERED_BYTES) {
+      client.ws.terminate();
+      return;
+    }
+    client.ws.send(payload);
+  }
+
+  /**
+   * Отозванная сессия: её сокеты закрываются кодом 4001. Клиент переподключится уже без сессии
+   * и получит hello с me = null - персональные события по старому соединению больше не придут.
+   */
+  private closeSession(sessionId: string): void {
+    for (const c of this.clients) {
+      if (c.sessionId !== sessionId) continue;
+      this.unregister(c);
+      c.ws.close(SESSION_REVOKED, 'session revoked');
+    }
   }
 
   private pingAll(): void {
@@ -228,7 +312,8 @@ export class RealtimeServer implements OnApplicationBootstrap, OnApplicationShut
   }
 
   private unregister(client: Client): void {
-    this.clients.delete(client);
+    if (!this.clients.delete(client)) return;
+    this.releaseIp(client.ip);
     for (const a of client.subs) this.byAsset.get(a)?.delete(client);
     if (client.userId) {
       const set = this.byUser.get(client.userId);
@@ -236,6 +321,21 @@ export class RealtimeServer implements OnApplicationBootstrap, OnApplicationShut
       if (set?.size === 0) this.byUser.delete(client.userId);
     }
   }
+}
+
+/**
+ * История для графика: последний тик каждого интервала 250 мс и самый последний тик.
+ * DOGE даёт десятки изменений в секунду - 10 минут истории иначе весили бы мегабайт.
+ * Расчёт прогнозов и точки входа/выхода от этой выборки не зависят.
+ */
+export function thinForChart(ticks: Tick[], bucketMs = HISTORY_BUCKET_MS): Tick[] {
+  const out: Tick[] = [];
+  for (let i = 0; i < ticks.length; i++) {
+    const tick = ticks[i]!;
+    const next = ticks[i + 1];
+    if (!next || Math.floor(next.t / bucketMs) !== Math.floor(tick.t / bucketMs)) out.push(tick);
+  }
+  return out;
 }
 
 function parseCookies(header: string | undefined): Record<string, string> {

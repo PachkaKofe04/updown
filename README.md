@@ -8,8 +8,9 @@ Real quotes, virtual money: every prediction stores its price source, entry and 
 
 ## Status
 
-Early MVP. Working now: guest accounts, Coins ledger, live quotes (Kraken), predictions with
-server-side settlement, history API, WebSocket stream. The web client is in progress.
+Early MVP. Working now: guest accounts with an optional email login (one-time code), Coins ledger,
+live exchange quotes, predictions with server-side settlement, history and result verification,
+comeback bonus, product events, WebSocket stream and the mobile web client.
 
 ## Stack
 
@@ -35,6 +36,9 @@ pnpm dev
 web app on port 3000. With Docker installed you can use `pnpm db:docker` instead of the embedded
 database; the connection string is the same.
 
+Email login codes are printed to the API log in development. To send real emails set
+`SMTP_URL` (for example `smtps://user:password@smtp.example.com:465`) and `MAIL_FROM`.
+
 Tests:
 
 ```
@@ -43,11 +47,17 @@ pnpm -F @updown/api test
 
 Integration tests start their own PostgreSQL on port 54339.
 
+End-to-end check of the game loop in Chrome (needs `pnpm dev` running):
+
+```
+pnpm -F @updown/web e2e
+```
+
 ## Project structure
 
 | Path | Purpose |
 |---|---|
-| `apps/api` | NestJS API: identity, wallet, market data, predictions, realtime |
+| `apps/api` | NestJS API: identity, wallet, market data, predictions, bonuses, analytics, realtime |
 | `apps/web` | Next.js mobile-first client |
 | `packages/contracts` | REST and WebSocket schemas shared by API and web |
 | `infra/docker-compose.yml` | PostgreSQL and Redis for Docker-based setups |
@@ -67,4 +77,5 @@ append-only ledger, and prediction terms cannot change after entry.
 
 ## Market data
 
-Development uses Kraken's public WebSocket feed.
+Live quotes come from an exchange WebSocket order book feed set by `MARKET_WS_URL` in
+`apps/api/.env`. Without it the API runs on simulated quotes, which is allowed in development only.
