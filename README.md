@@ -53,6 +53,14 @@ End-to-end check of the game loop in Chrome (needs `pnpm dev` running):
 pnpm -F @updown/web e2e
 ```
 
+## Production
+
+`infra/production` has a single-server setup: PostgreSQL in Docker bound to localhost, the API and
+the web app as systemd services, nginx in front (`/api` and `/ws` go to the API, everything else to
+the web app). Settings come from `api.env` (see `api.env.example`); `deploy.sh` pulls, builds and
+restarts; `backup-db.sh` keeps 14 days of database dumps. `GET /health` returns 503 when the
+database is unreachable.
+
 ## Project structure
 
 | Path | Purpose |

@@ -139,6 +139,12 @@ describe('realtime', () => {
     for (let i = 1; i < thin.length; i++) expect(thin[i]!.t - thin[i - 1]!.t).toBeGreaterThanOrEqual(225);
   });
 
+  it('health: база доступна, состояние фидов по активам', async () => {
+    const res = await request(ta.app.getHttpServer()).get('/health').expect(200);
+    expect(res.body).toMatchObject({ ok: true, db: true });
+    expect(res.body.feeds.BTCUSD).toBe('live');
+  });
+
   it('выход закрывает персональный сокет этой сессии', async () => {
     const { agent, cookie } = await guest();
     const socket = await connect(cookie);

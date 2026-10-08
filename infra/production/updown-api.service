@@ -1,0 +1,21 @@
+[Unit]
+Description=UpDown API
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=updown
+WorkingDirectory=/opt/updown/app/apps/api
+EnvironmentFile=/opt/updown/api.env
+ExecStart=/usr/bin/node dist/main.js
+Restart=always
+RestartSec=3
+# Остановка с дренажом: новые прогнозы не принимаются, открытые доигрывают (до 6 минут).
+KillSignal=SIGTERM
+TimeoutStopSec=420
+MemoryMax=600M
+NoNewPrivileges=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

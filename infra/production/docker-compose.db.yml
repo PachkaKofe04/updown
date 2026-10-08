@@ -1,0 +1,38 @@
+# PostgreSQL для production: только на 127.0.0.1, данные в томе, пароль из db.env.
+# Настройки под небольшой сервер (2 ГБ памяти, рядом API и сайт).
+name: updown-prod
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    env_file: db.env
+    environment:
+      POSTGRES_USER: updown
+      POSTGRES_DB: updown
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C --locale-provider=builtin --builtin-locale=C.UTF-8
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=384MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - max_connections=40
+      - -c
+      - wal_compression=on
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql
+    shm_size: 128mb
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U updown -d updown']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
