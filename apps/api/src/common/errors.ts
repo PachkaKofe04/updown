@@ -31,6 +31,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   account_not_found: 'Аккаунт с этой почтой не найден.',
   already_registered: 'Прогресс уже сохранён на почту.',
   comeback_unavailable: 'Бонус сейчас недоступен.',
+  mail_unavailable: 'Не удалось отправить письмо с кодом. Попробуйте ещё раз через минуту.',
   maintenance: 'Короткое обслуживание. Новые прогнозы откроются через минуту.',
   internal: 'Что-то пошло не так. Попробуйте ещё раз.',
 };
@@ -56,6 +57,7 @@ const STATUS: Record<ErrorCode, number> = {
   account_not_found: HttpStatus.NOT_FOUND,
   already_registered: HttpStatus.CONFLICT,
   comeback_unavailable: HttpStatus.CONFLICT,
+  mail_unavailable: HttpStatus.SERVICE_UNAVAILABLE,
   maintenance: HttpStatus.SERVICE_UNAVAILABLE,
   internal: HttpStatus.INTERNAL_SERVER_ERROR,
 };

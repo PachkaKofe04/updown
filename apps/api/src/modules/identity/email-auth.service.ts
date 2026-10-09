@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EMAIL_CODE_LENGTH, type EmailStartResponse, type EmailVerifyBody } from '@updown/contracts';
 import { and, desc, eq, gt, isNull, sql } from 'drizzle-orm';
 import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -9,7 +9,8 @@ import { RateLimiter } from '../../common/rate-limit.js';
 import { DB, type Db, type Tx } from '../../db/db.js';
 import { authIdentities, emailCodes, users } from '../../db/schema.js';
 import { AnalyticsService } from '../analytics/analytics.service.js';
-import { type AuthContext, IdentityService, type RequestMeta } from './identity.service.js';
+import { loginCodeEmail } from './email-templates.js';
+import { type AuthContext, IdentityService, maskEmail, type RequestMeta } from './identity.service.js';
 import { MailSender } from './mail.js';
 
 const CODE_TTL_MS = 10 * 60_000;
@@ -37,6 +38,7 @@ function hashCode(codeId: string, code: string): Buffer {
  */
 @Injectable()
 export class EmailAuthService {
+  private readonly log = new Logger('EmailAuth');
   private readonly startLimiter = new RateLimiter(20, 60 * 60_000);
   private readonly verifyLimiter = new RateLimiter(30, 10 * 60_000);
 
@@ -77,17 +79,12 @@ export class EmailAuthService {
       expiresAt: new Date(now + CODE_TTL_MS),
     });
     try {
-      await this.mail.send({
-        to: email,
-        subject: `Код входа UpDown: ${code}`,
-        text:
-          `Ваш код: ${code}\n\nОн действует ${CODE_TTL_MS / 60_000} минут. ` +
-          'Если вы не запрашивали код, просто проигнорируйте это письмо.',
-      });
+      await this.mail.send(loginCodeEmail(email, code, CODE_TTL_MS / 60_000));
     } catch (error) {
       // письмо не ушло: код не должен занимать лимит и мешать повтору
       await this.db.delete(emailCodes).where(eq(emailCodes.id, id));
-      throw error;
+      this.log.error(`login code to ${maskEmail(email)} not sent: ${(error as Error).message}`);
+      throw new DomainError('mail_unavailable');
     }
     this.analytics.track('email_code_sent', null);
     return { resendAfterSec: RESEND_AFTER_MS / 1000, ttlMin: CODE_TTL_MS / 60_000 };

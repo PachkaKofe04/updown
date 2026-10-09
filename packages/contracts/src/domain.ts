@@ -50,6 +50,7 @@ export const ERROR_CODES = [
   'account_not_found',
   'already_registered',
   'comeback_unavailable',
+  'mail_unavailable',
   'maintenance',
   'internal',
 ] as const;

@@ -45,9 +45,16 @@ function handle(msg: WsServerMessage): void {
  * Сверка после (пере)подключения. Прогнозы, которые были открыты до обрыва, но в снимке сервера
  * уже не открыты, рассчитались без нас: их итог догружается и показывается один раз.
  */
+let profileRefreshed = false;
+
 function onHello(msg: WsHello): void {
   const previousUser = useSession.getState().me?.user.id;
   useSession.getState().setMe(msg.me);
+  // один запрос профиля за визит: сервер продлит cookie сессии, если пора (сокет cookie не выставляет)
+  if (msg.me && !profileRefreshed) {
+    profileRefreshed = true;
+    void api.me().then((me) => useSession.getState().setMe(me)).catch(() => {});
+  }
   useMarket.getState().markHello();
   const trade = useTrade.getState();
   const sameUser = msg.me !== null && msg.me.user.id === previousUser;

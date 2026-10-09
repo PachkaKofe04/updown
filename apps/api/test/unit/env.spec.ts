@@ -5,7 +5,9 @@ const PROD = {
   NODE_ENV: 'production',
   DATABASE_URL: 'postgres://app:secret@db.internal:5432/updown',
   WEB_ORIGIN: 'https://updown.example',
-  SMTP_URL: 'smtps://mailer:secret@smtp.example:465',
+  SMTP_HOST: 'smtp.example',
+  SMTP_USER: 'mailer@example.com',
+  SMTP_PASSWORD: 'p@ss:w/rd',
   MARKET_WS_URL: 'wss://feed.example/v2',
 };
 
@@ -32,7 +34,8 @@ describe('env', () => {
     ['localhost как origin', { WEB_ORIGIN: 'https://localhost:3000' }],
     ['незащищённые cookie', { COOKIE_SECURE: 'false' }],
     ['имитация котировок', { MARKET_SOURCE: 'simulated' }],
-    ['нет почты для кодов входа', { SMTP_URL: undefined }],
+    ['нет почты для кодов входа', { SMTP_HOST: undefined }],
+    ['почта без пароля', { SMTP_PASSWORD: undefined }],
   ])('production не запускается: %s', (_name, override) => {
     expect(() => loadEnv({ ...PROD, ...override })).toThrow();
   });

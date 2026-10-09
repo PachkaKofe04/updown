@@ -16,6 +16,7 @@ import { DomainError } from '../../common/errors.js';
 import { RateLimiter } from '../../common/rate-limit.js';
 import { ZodPipe } from '../../common/zod.pipe.js';
 import { ENV, type Env } from '../../config/env.js';
+import { cookieOptions } from './cookies.js';
 import { EmailAuthService } from './email-auth.service.js';
 import type { AuthContext } from './identity.service.js';
 import { DEVICE_COOKIE, IdentityService, SESSION_COOKIE } from './identity.service.js';
@@ -117,12 +118,6 @@ export class AuthController {
   }
 
   private cookieOptions(maxAge: number): CookieOptions {
-    return {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: this.env.COOKIE_SECURE,
-      path: '/',
-      maxAge,
-    };
+    return cookieOptions(this.env, maxAge);
   }
 }

@@ -30,6 +30,8 @@ export interface RequestMeta {
 export interface AuthContext {
   userId: string;
   sessionId: string;
+  /** Срок сессии только что продлён: cookie в браузере тоже нужно продлить. */
+  renewed?: boolean;
 }
 
 @Injectable()
@@ -147,13 +149,15 @@ export class IdentityService {
       .where(and(eq(sessions.id, id), isNull(sessions.revokedAt), gt(sessions.expiresAt, new Date(now))));
     if (!row || row.status !== 'active') return null;
 
-    // Скользящий срок сессии: продлеваем не чаще раза в час.
+    // Скользящий срок сессии: продлеваем не чаще раза в час. Игрок, который возвращается,
+    // не вводит код на том же устройстве: срок отсчитывается от последнего визита.
     if (now - row.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
       await this.db
         .update(sessions)
         .set({ lastSeenAt: new Date(now), expiresAt: new Date(now + SESSION_TTL_MS) })
         .where(eq(sessions.id, id));
       await this.db.update(users).set({ lastSeenAt: new Date(now) }).where(eq(users.id, row.userId));
+      return { userId: row.userId, sessionId: id, renewed: true };
     }
     return { userId: row.userId, sessionId: id };
   }
@@ -172,6 +176,8 @@ export class IdentityService {
       deviceId: isUuid(meta.deviceId) ? meta.deviceId : null,
       ip: meta.ip,
       userAgent: meta.userAgent?.slice(0, 400) ?? null,
+      // те же часы, что и при продлении сессии (resolveSession), а не часы базы
+      lastSeenAt: new Date(now),
       expiresAt: new Date(now + SESSION_TTL_MS),
     });
   }

@@ -69,6 +69,19 @@ describe('ник при входе', () => {
     expect(res.body.nickname).toMatch(/^[A-Za-z]+\d{2}$/);
   });
 
+  it('возвращающийся игрок: сессия и cookie продлеваются, код на том же устройстве не нужен', async () => {
+    const agent = request.agent(server());
+    await agent.post('/v1/auth/guest').expect(200);
+    // в течение часа сессия не продлевается и cookie не переписывается
+    expect((await agent.get('/v1/me').expect(200)).headers['set-cookie']).toBeUndefined();
+    ta.clock.advance(2 * 60 * 60_000);
+    const later = await agent.get('/v1/me').expect(200);
+    const cookie = ([] as string[]).concat(later.headers['set-cookie'] ?? []).find((c) => c.startsWith('ud_sid='));
+    expect(cookie).toBeDefined();
+    expect(cookie).toContain(`Max-Age=${180 * 24 * 60 * 60}`);
+    expect(cookie).toContain('HttpOnly');
+  });
+
   it('БД сама не пустит ник в обход правил', async () => {
     try {
       await db.pool.query(

@@ -37,7 +37,10 @@ web app on port 3000. With Docker installed you can use `pnpm db:docker` instead
 database; the connection string is the same.
 
 Email login codes are printed to the API log in development. To send real emails set
-`SMTP_URL` (for example `smtps://user:password@smtp.example.com:465`) and `MAIL_FROM`.
+`SMTP_HOST`, `SMTP_PORT` (465 by default), `SMTP_USER`, `SMTP_PASSWORD` and `MAIL_FROM` in
+`apps/api/.env`, then check the setup with `pnpm -F @updown/api build` and
+`pnpm -F @updown/api mail:test you@example.com`. A code is needed once per device: the session
+cookie lives 180 days and is extended on every visit.
 
 Tests:
 

@@ -28,8 +28,12 @@ const EnvSchema = z
     PREDICTIONS_PER_SECOND: z.coerce.number().int().min(1).max(1000).default(2),
     // Не правило "1 IP = 1 аккаунт", а ограничение частоты создания гостей с одного IP за 10 минут.
     GUESTS_PER_IP_PER_10_MIN: z.coerce.number().int().min(1).max(10_000).default(5),
-    // Почта для кодов входа: smtp(s)://user:pass@host:port. Без неё в разработке код пишется в лог.
-    SMTP_URL: z.url({ protocol: /^smtps?$/ }).optional(),
+    // Почта для кодов входа (SMTP сервиса рассылок). Отдельными полями: логин и пароль вставляются
+    // как есть, без кодирования в адрес. Без SMTP_HOST в разработке код пишется в лог.
+    SMTP_HOST: z.string().min(1).optional(),
+    SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(465),
+    SMTP_USER: z.string().min(1).optional(),
+    SMTP_PASSWORD: z.string().min(1).optional(),
     MAIL_FROM: z.string().default('UpDown <no-reply@updown.local>'),
     // Comeback: сколько Coins даётся, когда они закончились, и как часто.
     COMEBACK_AMOUNT: z.coerce.number().int().min(1).max(1_000_000).default(1000),
@@ -51,6 +55,7 @@ const EnvSchema = z
   .superRefine((e, ctx) => {
     const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
     if (e.MARKET_SOURCE === 'exchange' && !e.MARKET_WS_URL) issue('MARKET_WS_URL is required for MARKET_SOURCE=exchange');
+    if (e.SMTP_HOST && !(e.SMTP_USER && e.SMTP_PASSWORD)) issue('SMTP_USER and SMTP_PASSWORD are required with SMTP_HOST');
     if (!e.isProduction) return;
     // Имитация котировок в production запрещена: игрок не должен видеть ненастоящую цену.
     if (e.MARKET_SOURCE === 'simulated') issue('MARKET_SOURCE=simulated is not allowed in production');
@@ -60,7 +65,7 @@ const EnvSchema = z
       issue('WEB_ORIGIN must be the public https origin in production');
     }
     if (!e.COOKIE_SECURE) issue('COOKIE_SECURE cannot be false in production');
-    if (!e.SMTP_URL) issue('SMTP_URL must be set in production: login codes are sent by email');
+    if (!e.SMTP_HOST) issue('SMTP_HOST must be set in production: login codes are sent by email');
   });
 
 export type Env = z.infer<typeof EnvSchema>;
